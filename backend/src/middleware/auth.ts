@@ -56,7 +56,12 @@ async function getJWKS(supabaseUrl: string): Promise<{ keys: JWKSKey[] } | null>
       console.error('[JWKS] Fetch failed with status:', res.status);
       return null;
     }
-    jwksCache = await res.json();
+    const data = await res.json() as { keys: JWKSKey[] } | null;
+    if (!data || !data.keys) {
+      console.error('[JWKS] Invalid JWKS response');
+      return null;
+    }
+    jwksCache = data;
     jWKSCacheTime = now;
     console.log('[JWKS] Fetched successfully, keys:', jwksCache.keys.length);
     return jwksCache;

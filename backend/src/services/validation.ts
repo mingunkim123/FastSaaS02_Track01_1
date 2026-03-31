@@ -7,9 +7,9 @@ import type { TransactionAction, CreatePayload, UpdatePayload, ReadPayload, Dele
  * required action type, payload, and confidence score
  */
 export const AIResponseSchema = z.object({
-  type: z.enum(['create', 'update', 'read', 'delete'], { message: 'Action type must be one of: create, update, read, delete' }),
-  payload: z.record(z.any()),
-  confidence: z.number().min(0, { message: 'Confidence must be at least 0' }).max(1, { message: 'Confidence cannot exceed 1' }),
+  type: z.enum(['create', 'update', 'read', 'delete']),
+  payload: z.record(z.string(), z.any()),
+  confidence: z.number().min(0).max(1),
 });
 
 /**
