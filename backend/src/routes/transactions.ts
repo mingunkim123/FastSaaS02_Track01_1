@@ -1,6 +1,6 @@
 // backend/src/routes/transactions.ts
 import { Hono } from 'hono';
-import { and, eq, like, sql } from 'drizzle-orm';
+import { and, eq, like, sql, isNull } from 'drizzle-orm';
 import { getDb, Env } from '../db/index';
 import { transactions } from '../db/schema';
 import type { Variables } from '../middleware/auth';
@@ -20,9 +20,9 @@ router.get('/', async (c) => {
         ? await db.select().from(transactions).where(
             // 사용자 ID와 날짜가 모두 일치하는 거래 조회
             // like(transactions.date, '2024-03%')로 YYYY-MM으로 시작하는 모든 날짜 매칭
-            and(eq(transactions.userId, userId), like(transactions.date, `${date}%`))
+            and(eq(transactions.userId, userId), like(transactions.date, `${date}%`), isNull(transactions.deletedAt))
           )
-        : await db.select().from(transactions).where(eq(transactions.userId, userId));
+        : await db.select().from(transactions).where(and(eq(transactions.userId, userId), isNull(transactions.deletedAt)));
     return c.json(rows);
 });
 
@@ -51,7 +51,7 @@ router.post('/', async (c) => {
 });
 
 // DELETE /api/transactions/:id
-// 거래 기록 삭제 (본인의 기록만 가능)
+// 거래 기록 삭제 (본인의 기록만 가능, soft delete)
 router.delete('/:id', async (c) => {
     const db = getDb(c.env);
     const userId = c.get('userId');
@@ -60,9 +60,18 @@ router.delete('/:id', async (c) => {
     // 삭제 조건:
     // 1. ID가 일치하고
     // 2. 그 거래의 userId가 현재 사용자와 일치해야만 삭제 가능 (자신의 거래만 삭제)
-    await db.delete(transactions).where(
-        and(eq(transactions.id, id), eq(transactions.userId, userId))
-    );
+    const result = await db
+        .update(transactions)
+        .set({ deletedAt: new Date().toISOString() })
+        .where(
+            and(eq(transactions.id, id), eq(transactions.userId, userId))
+        )
+        .returning();
+
+    if (!result.length) {
+        return c.json({ success: false, error: 'Transaction not found' }, 404);
+    }
+
     return c.json({ success: true });
 });
 
@@ -85,10 +94,43 @@ router.get('/summary', async (c) => {
             total: sql<number>`SUM(${transactions.amount})`.as('total'),
         })
         .from(transactions)
-        .where(and(eq(transactions.userId, userId), like(transactions.date, `${month}%`)))
+        .where(and(eq(transactions.userId, userId), like(transactions.date, `${month}%`), isNull(transactions.deletedAt)))
         // type과 category 조합별로 그룹화 (같은 카테고리들의 합계를 한 행으로)
         .groupBy(transactions.type, transactions.category);
     return c.json(rows);
+});
+
+// POST /api/transactions/:id/undo
+// 삭제된 거래 복원 (soft delete 되돌리기)
+router.post('/:id/undo', async (c) => {
+    const db = getDb(c.env);
+    const userId = c.get('userId');
+    const id = Number(c.req.param('id'));
+
+    const result = await db
+        .update(transactions)
+        .set({ deletedAt: null })
+        .where(
+            and(
+                eq(transactions.id, id),
+                eq(transactions.userId, userId)
+            )
+        )
+        .returning();
+
+    if (!result.length) {
+        return c.json({ success: false, error: 'Transaction not found' }, 404);
+    }
+
+    const tx = result[0];
+    const typeLabel = tx.type === 'income' ? '수입' : '지출';
+    const message = `${typeLabel} ₩${tx.amount.toLocaleString('ko-KR')} ${tx.memo || tx.category} (${tx.date}) 복원되었습니다`;
+
+    return c.json({
+        success: true,
+        message,
+        result: tx,
+    });
 });
 
 export default router;
