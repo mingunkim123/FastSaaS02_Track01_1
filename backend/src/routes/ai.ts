@@ -49,12 +49,11 @@ router.post('/action', async (c) => {
       .limit(10);
 
     const categoryRows = await db
-      .select({ category: transactions.category })
+      .selectDistinct({ category: transactions.category })
       .from(transactions)
-      .where(and(eq(transactions.userId, userId), isNull(transactions.deletedAt)))
-      .distinct();
+      .where(and(eq(transactions.userId, userId), isNull(transactions.deletedAt)));
 
-    const userCategories = categoryRows.map((r) => r.category);
+    const userCategories = categoryRows.map((r: any) => r.category);
 
     // Parse user input with AI
     const action = await aiService.parseUserInput(text, recentTransactions, userCategories);
@@ -138,28 +137,27 @@ router.post('/action', async (c) => {
         const payload = validateReadPayload(action.payload);
         const month = payload.month || new Date().toISOString().slice(0, 7);
 
-        let query = db
-          .select()
-          .from(transactions)
-          .where(
-            and(
-              eq(transactions.userId, userId),
-              isNull(transactions.deletedAt),
-              sql`${transactions.date} LIKE ${month}%`
-            )
-          );
+        const conditions: any[] = [
+          eq(transactions.userId, userId),
+          isNull(transactions.deletedAt),
+          sql`${transactions.date} LIKE ${month}%`
+        ];
 
         // Add category filter if provided
         if (payload.category) {
-          query = query.where(eq(transactions.category, payload.category));
+          conditions.push(eq(transactions.category, payload.category));
         }
 
         // Add type filter if provided
         if (payload.type) {
-          query = query.where(eq(transactions.type, payload.type));
+          conditions.push(eq(transactions.type, payload.type));
         }
 
-        const results = await query.orderBy(desc(transactions.date));
+        const results = await db
+          .select()
+          .from(transactions)
+          .where(and(...conditions))
+          .orderBy(desc(transactions.date));
 
         const totalAmount = results.reduce((sum, t) => sum + t.amount, 0);
 
