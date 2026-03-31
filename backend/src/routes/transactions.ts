@@ -4,6 +4,8 @@ import { and, eq, like, sql, isNull } from 'drizzle-orm';
 import { getDb, Env } from '../db/index';
 import { transactions } from '../db/schema';
 import type { Variables } from '../middleware/auth';
+import type { Transaction } from '../db/schema';
+import { validateCreatePayload } from '../services/validation';
 
 const router = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -33,17 +35,20 @@ router.post('/', async (c) => {
     const userId = c.get('userId');  // 미들웨어에서 검증된 사용자 ID (자동 주입)
     const body = await c.req.json();
 
+    // Validate input against schema before processing
+    const validated = validateCreatePayload(body);
+
     // 클라이언트가 보낸 데이터로 거래 생성
     // userId는 서버에서 강제로 설정해서 다른 사용자 데이터를 건들 수 없게 방지 (보안)
     const result = await db
         .insert(transactions)
         .values({
             userId,  // 요청자 자신으로 고정
-            type: body.type,      // 'income' 또는 'expense'
-            amount: body.amount,  // 금액
-            category: body.category,
-            memo: body.memo ?? null,  // 메모 없으면 null로 저장
-            date: body.date,      // YYYY-MM-DD
+            type: validated.transactionType,      // 'income' 또는 'expense'
+            amount: validated.amount,  // 금액
+            category: validated.category,
+            memo: validated.memo ?? null,  // 메모 없으면 null로 저장
+            date: validated.date,      // YYYY-MM-DD
         })
         .returning({ id: transactions.id });  // 저장된 ID 반환
 
@@ -96,7 +101,7 @@ router.get('/summary', async (c) => {
         .from(transactions)
         .where(and(eq(transactions.userId, userId), like(transactions.date, `${month}%`), isNull(transactions.deletedAt)))
         // type과 category 조합별로 그룹화 (같은 카테고리들의 합계를 한 행으로)
-        .groupBy(transactions.type, transactions.category);
+        .groupBy((r: typeof transactions.$inferSelect) => r.type, (r: typeof transactions.$inferSelect) => r.category);
     return c.json(rows);
 });
 

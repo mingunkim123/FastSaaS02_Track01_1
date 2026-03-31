@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, type GenerativeModel } from '@google/generative-ai';
 import type { TransactionAction } from '../types/ai';
 import type { Transaction } from '../db/schema';
 import { validateAIResponse } from './validation';
@@ -26,7 +26,7 @@ Only return valid JSON. No explanations.`;
 
 export class AIService {
   private client: GoogleGenerativeAI;
-  private model: any;
+  private model: GenerativeModel;
 
   constructor(apiKey: string) {
     this.client = new GoogleGenerativeAI(apiKey);
@@ -63,7 +63,7 @@ User's categories: ${userCategories.join(', ') || '(none)'}`;
 
       // Try to parse JSON response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
+      if (!jsonMatch || !jsonMatch[0]) {
         throw new Error('No JSON found in response');
       }
 
