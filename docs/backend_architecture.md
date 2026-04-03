@@ -459,6 +459,198 @@ AI 대화 기록은 별도의 엔드포인트로 관리됩니다. `GET /api/ai/c
 
 **한 마디로 요약하면**: 사용자가 한국어로 말하면 → AI가 의도를 파악하고 → 가계부에 자동 기록하고 → 대화 기록으로 남기고 → 필요하면 재무 분석 리포트까지 만들어주는 시스템입니다.
 
-## 12. 현재 구조 한 줄 요약
+## 12. API 타입 정의
+
+`src/types/ai.ts`에 정의된 핵심 타입들입니다.
+
+### ActionType
+
+```ts
+type ActionType = 'create' | 'update' | 'read' | 'delete' | 'report';
+```
+
+### TransactionAction (AI 파싱 결과)
+
+```ts
+interface TransactionAction {
+  type: ActionType;
+  payload: CreatePayload | UpdatePayload | ReadPayload | DeletePayload | ReportPayload;
+  confidence: number; // 0.0 ~ 1.0
+}
+```
+
+### Payload 타입별 정의
+
+| 타입 | 주요 필드 |
+| --- | --- |
+| `CreatePayload` | `transactionType: 'income'\|'expense'`, `amount: number`, `category: string`, `date: string (YYYY-MM-DD)`, `memo?: string` |
+| `UpdatePayload` | `id: number`, `transactionType?`, `amount?`, `category?`, `memo?`, `date?` |
+| `ReadPayload` | `month?: string (YYYY-MM)`, `category?: string`, `type?: 'income'\|'expense'` |
+| `DeletePayload` | `id: number`, `reason?: string` |
+| `ReportPayload` | `reportType: 'monthly_summary'\|'category_detail'\|'spending_pattern'\|'anomaly'\|'suggestion'`, `params?: { month?, category? }` |
+
+### AIActionResponse (공통 응답 형태)
+
+```ts
+interface AIActionResponse {
+  success: boolean;
+  type?: ActionType;
+  result?: any;      // 액션 결과 (create/update/read/delete 실행 결과)
+  message?: string;  // 한국어 응답 문구
+  error?: string;    // 에러 발생 시 메시지
+}
+```
+
+### ReportSection / Report
+
+```ts
+interface ReportSection {
+  type: 'card' | 'pie' | 'bar' | 'line' | 'alert' | 'suggestion';
+  title: string;
+  subtitle?: string;
+  metric?: string;
+  trend?: 'up' | 'down' | 'stable';
+  data?: Record<string, any>;
+}
+
+interface Report {
+  reportType: ReportPayload['reportType'];
+  title: string;
+  subtitle?: string;
+  sections: ReportSection[];
+  generatedAt: string; // ISO 8601
+}
+```
+
+---
+
+## 13. API 에러 처리 및 테스트 방법
+
+### 에러 분류 체계
+
+`src/routes/ai.ts`는 에러를 세 가지로 분류해서 HTTP 상태 코드를 결정합니다.
+
+| 분류 | 상태 코드 | 판별 기준 | 예시 |
+| --- | --- | --- | --- |
+| 클라이언트 에러 | `400` | `ZodError`, `SyntaxError`, 입력값 규칙 위반 메시지 | 금액 초과, 잘못된 날짜 형식, 필수 필드 누락 |
+| AI 서비스 에러 | `502` | `error.name === 'AIServiceError'` | Gemini API 호출 실패 |
+| 서버 에러 | `500` | 그 외 모든 에러 | DB 연결 실패, 예상치 못한 예외 |
+| 미소유 리소스 | `404` | 본인 소유가 아닌 거래 접근 | 다른 사용자의 거래 수정/삭제 시도 |
+
+### isClientError 판별 패턴
+
+```ts
+// src/routes/ai.ts
+function isClientError(error: unknown): boolean {
+  if (error instanceof ZodError || error instanceof SyntaxError) return true;
+  if (!(error instanceof Error)) return false;
+  return [
+    /^Text input is required$/,
+    /^Transaction ID is required/,
+    /^Amount must /,
+    /^Amount exceeds /,
+    /^Invalid date format/,
+    /^Date cannot /,
+    /^Category cannot /,
+  ].some((pattern) => pattern.test(error.message));
+}
+```
+
+### 에러 응답 형태
+
+모든 에러는 아래 형식으로 응답합니다.
+
+```json
+{ "success": false, "error": "에러 메시지" }
+```
+
+성공 시:
+
+```json
+{
+  "success": true,
+  "type": "create",
+  "result": { ... },
+  "message": "커피 ₩5,400 지출을 기록했습니다",
+  "content": "커피 ₩5,400 지출을 기록했습니다",
+  "metadata": { "actionType": "create", "action": { ... } }
+}
+```
+
+### 에러 테스트 시나리오
+
+#### 400 — 클라이언트 입력 오류
+
+```bash
+# text 누락
+curl -X POST http://localhost:8787/api/ai/action \
+  -H "Authorization: Bearer <JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+# → { "success": false, "error": "Text input is required" }
+
+# 금액 초과 (validateAmount 실패)
+curl -X POST http://localhost:8787/api/ai/action \
+  -H "Authorization: Bearer <JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{ "text": "1조원 지출 기록해줘" }'
+# → { "success": false, "error": "Amount exceeds ..." }
+
+# 잘못된 날짜 형식 (validateDate 실패)
+curl -X POST http://localhost:8787/api/ai/action \
+  -H "Authorization: Bearer <JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{ "text": "2099-99-99 스타벅스 5000원" }'
+# → { "success": false, "error": "Invalid date format ..." }
+```
+
+#### 404 — 미소유 리소스
+
+```bash
+# 다른 사용자의 거래 삭제 시도
+curl -X DELETE http://localhost:8787/api/transactions/9999 \
+  -H "Authorization: Bearer <JWT>"
+# → { "success": false, "error": "Transaction not found" }
+```
+
+#### 401 — 인증 실패
+
+```bash
+# JWT 없이 요청
+curl -X GET http://localhost:8787/api/transactions
+# → 401 (authMiddleware가 처리)
+
+# 만료된 JWT
+curl -X GET http://localhost:8787/api/transactions \
+  -H "Authorization: Bearer <expired_token>"
+# → 401
+```
+
+#### 502 — AI 서비스 에러
+
+Gemini API 키가 잘못되었거나 API가 다운된 경우 발생합니다. 테스트 시 `GEMINI_API_KEY`를 의도적으로 잘못된 값으로 설정하면 재현할 수 있습니다.
+
+### 테스트 파일별 에러 케이스
+
+| 파일 | 주요 에러 테스트 |
+| --- | --- |
+| `src/middleware/auth.test.ts` | 잘못된 JWT, 만료된 토큰, 서명 불일치 |
+| `tests/routes/ai.test.ts` | 잘못된 액션 타입, AI 파싱 실패 시 동작 |
+| `tests/routes/transactions.test.ts` | 존재하지 않는 거래 undo 시 404 반환 |
+| `tests/services/validation.test.ts` | Zod 스키마 위반, 금액/날짜/카테고리 유효성 검사 실패 |
+| `tests/services/messages.test.ts` | 엣지케이스 입력값에서의 메시지 생성 |
+
+### 테스트 실행
+
+```bash
+cd backend
+npm test                        # 전체 테스트
+npm test -- --reporter=verbose  # 상세 출력
+npm test tests/routes/ai.test.ts  # 특정 파일만
+```
+
+---
+
+## 14. 현재 구조 한 줄 요약
 
 현재 FastSaaS 백엔드는 "Cloudflare Workers 위의 Hono 앱" 안에서, 인증된 사용자의 요청을 `routes -> services -> db` 구조로 흘려 보내고, AI 입력은 별도의 `services/ai.ts` 레이어를 통해 Gemini와 연결하는 형태로 정리되어 있습니다.
