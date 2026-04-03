@@ -74,7 +74,7 @@ async function getJWKS(supabaseUrl: string): Promise<{ keys: JWKSKey[] } | null>
 async function verifyES256(
   token: string,
   supabaseUrl: string
-): Promise<{ sub: string; [key: string]: unknown } | null> {
+): Promise<{ sub: string;[key: string]: unknown } | null> {
   // JWT는 header.payload.signature 형식의 3부분으로 구성
   const parts = token.split('.');
   if (parts.length !== 3) return null;
@@ -168,7 +168,7 @@ async function verifyES256(
 async function verifyHS256(
   token: string,
   secret: string
-): Promise<{ sub: string; [key: string]: unknown } | null> {
+): Promise<{ sub: string;[key: string]: unknown } | null> {
   // HS256은 HMAC(Hash-based Message Authentication Code) 사용 - 대칭키 암호화
   // 비공개키 하나로 서명하고 검증 (ES256은 공개키/개인키 쌍)
   const parts = token.split('.');
@@ -201,7 +201,7 @@ export async function verifyJWT(
   token: string,
   secret: string,
   supabaseUrl?: string
-): Promise<{ sub: string; [key: string]: unknown } | null> {
+): Promise<{ sub: string;[key: string]: unknown } | null> {
   const parts = token.split('.');
   if (parts.length !== 3) {
     console.error('[JWT] Invalid token format');

@@ -38,9 +38,9 @@ export class AIService {
   private client: GoogleGenerativeAI;
   private model: GenerativeModel;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, modelName: string = 'gemini-2.0-flash') {
     this.client = new GoogleGenerativeAI(apiKey);
-    this.model = this.client.getGenerativeModel({ model: 'models/gemma-2-9b-it' });
+    this.model = this.client.getGenerativeModel({ model: modelName });
   }
 
   async parseUserInput(
