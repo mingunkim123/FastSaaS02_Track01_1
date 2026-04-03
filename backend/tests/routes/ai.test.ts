@@ -604,9 +604,9 @@ describe('POST /api/ai/action', () => {
     });
 
     it('handles Gemini API failure gracefully', async () => {
-      mockAiInstance.parseUserInput.mockRejectedValue(
-        new Error('Failed to process request. Please try again.')
-      );
+      const error = new Error('AI service is temporarily unavailable. Please try again shortly.');
+      error.name = 'AIServiceError';
+      mockAiInstance.parseUserInput.mockRejectedValue(error);
 
       const response = await app.request(new Request('http://localhost/api/ai/action', {
         method: 'POST',
@@ -616,9 +616,9 @@ describe('POST /api/ai/action', () => {
 
       const body = await response.json() as any;
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(502);
       expect(body.success).toBe(false);
-      expect(body.error).toContain('Failed');
+      expect(body.error).toContain('temporarily unavailable');
     });
 
     it('handles validation failure with error message', async () => {
@@ -916,6 +916,8 @@ describe('POST /api/ai/action', () => {
       expect(body.message).toBeDefined();
       expect(typeof body.message).toBe('string');
       expect(body.message.length).toBeGreaterThan(0);
+      expect(body.content).toBe(body.message);
+      expect(body.metadata?.actionType).toBe('create');
     });
   });
 });

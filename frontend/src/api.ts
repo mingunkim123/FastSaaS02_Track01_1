@@ -65,6 +65,16 @@ export interface ReportSection {
   data?: Record<string, unknown> | Array<Record<string, unknown>>;
 }
 
+export interface AIActionResponse {
+  success: boolean;
+  type?: 'create' | 'update' | 'read' | 'delete' | 'report';
+  result?: unknown;
+  message?: string;
+  content?: string;
+  metadata?: Record<string, unknown>;
+  error?: string;
+}
+
 export const api = {
   getTransactions: (date?: string): Promise<Transaction[]> =>
     fetch(`${BASE}/api/transactions${date ? `?date=${date}` : ''}`, {
@@ -95,15 +105,20 @@ export const api = {
  * @param text - User message text
  * @returns Assistant response with content and metadata
  */
-export async function sendAIMessage(text: string): Promise<{ success: boolean; content: string; metadata?: Record<string, unknown> }> {
+export async function sendAIMessage(text: string): Promise<AIActionResponse> {
   const response = await fetch(`${BASE}/api/ai/action`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ text }),
   });
 
-  if (!response.ok) throw new Error('Failed to send AI message');
-  return response.json();
+  const data = await response.json().catch(() => ({ success: false, error: 'Failed to send AI message' }));
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to send AI message');
+  }
+
+  return data;
 }
 
 /**
