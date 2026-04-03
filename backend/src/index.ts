@@ -25,4 +25,15 @@ app.route('/api/transactions', transactions);
 app.route('/api/users', usersRoute);
 app.route('/api/ai', aiRouter);
 
+// 전역 에러 핸들러: 모든 라우트에서 발생하는 에러를 JSON으로 통일
+// ZodError (입력값 검증 실패) → 400 Bad Request
+// 그 외 에러 → 500 Internal Server Error
+app.onError((err, c) => {
+  if (err.name === 'ZodError') {
+    return c.json({ error: 'Validation failed', details: JSON.parse(err.message) }, 400);
+  }
+  console.error('[Server Error]', err);
+  return c.json({ error: err.message ?? 'Internal Server Error' }, 500);
+});
+
 export default app;
