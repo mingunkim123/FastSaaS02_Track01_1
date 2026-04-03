@@ -31,28 +31,33 @@ router.get('/', async (c) => {
 // POST /api/transactions
 // 새로운 거래 기록 저장
 router.post('/', async (c) => {
-    const db = getDb(c.env);
-    const userId = c.get('userId');  // 미들웨어에서 검증된 사용자 ID (자동 주입)
-    const body = await c.req.json();
+    try {
+        const db = getDb(c.env);
+        const userId = c.get('userId');  // 미들웨어에서 검증된 사용자 ID (자동 주입)
+        const body = await c.req.json();
 
-    // Validate input against schema before processing
-    const validated = validateCreatePayload(body);
+        // Validate input against schema before processing
+        // ZodError가 throw되면 전역 onError 핸들러가 400으로 처리
+        const validated = validateCreatePayload(body);
 
-    // 클라이언트가 보낸 데이터로 거래 생성
-    // userId는 서버에서 강제로 설정해서 다른 사용자 데이터를 건들 수 없게 방지 (보안)
-    const result = await db
-        .insert(transactions)
-        .values({
-            userId,  // 요청자 자신으로 고정
-            type: validated.transactionType,      // 'income' 또는 'expense'
-            amount: validated.amount,  // 금액
-            category: validated.category,
-            memo: validated.memo ?? null,  // 메모 없으면 null로 저장
-            date: validated.date,      // YYYY-MM-DD
-        })
-        .returning({ id: transactions.id });  // 저장된 ID 반환
+        // 클라이언트가 보낸 데이터로 거래 생성
+        // userId는 서버에서 강제로 설정해서 다른 사용자 데이터를 건들 수 없게 방지 (보안)
+        const result = await db
+            .insert(transactions)
+            .values({
+                userId,  // 요청자 자신으로 고정
+                type: validated.transactionType,      // 'income' 또는 'expense'
+                amount: validated.amount,  // 금액
+                category: validated.category,
+                memo: validated.memo ?? null,  // 메모 없으면 null로 저장
+                date: validated.date,      // YYYY-MM-DD
+            })
+            .returning({ id: transactions.id });  // 저장된 ID 반환
 
-    return c.json({ id: result[0].id }, 201);  // 201 Created 상태 코드
+        return c.json({ id: result[0].id }, 201);  // 201 Created 상태 코드
+    } catch (err) {
+        throw err;  // 전역 onError 핸들러로 위임 → JSON 응답 보장
+    }
 });
 
 // DELETE /api/transactions/:id
