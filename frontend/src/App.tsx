@@ -5,6 +5,7 @@ import BottomNav from './components/BottomNav';
 import RecordPage from './pages/RecordPage';
 import CalendarPage from './pages/CalendarPage';
 import StatsPage from './pages/StatsPage';
+import AIPage from './pages/AIPage';
 import LoginPage from './pages/LoginPage';
 import AuthCallback from './pages/AuthCallback';
 
@@ -34,6 +35,7 @@ function AppRoutes() {
             <Route path="/record" element={<ProtectedRoute><RecordPage /></ProtectedRoute>} />
             <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
             <Route path="/stats" element={<ProtectedRoute><StatsPage /></ProtectedRoute>} />
+            <Route path="/ai" element={<ProtectedRoute><AIPage /></ProtectedRoute>} />
           </Routes>
         </main>
         {showNav && <BottomNav />}

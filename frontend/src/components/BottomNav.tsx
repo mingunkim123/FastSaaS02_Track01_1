@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { CreditCard, Calendar, PieChart } from 'lucide-react';
+import { CreditCard, Calendar, PieChart, MessageCircle } from 'lucide-react';
 
 export default function BottomNav() {
     const location = useLocation();
@@ -9,6 +9,7 @@ export default function BottomNav() {
         { path: '/record', label: '기록', icon: CreditCard },
         { path: '/calendar', label: '달력', icon: Calendar },
         { path: '/stats', label: '통계', icon: PieChart },
+        { path: '/ai', label: 'AI', icon: MessageCircle },
     ];
 
     return (
