@@ -14,3 +14,4 @@ android/
 *.log
 
 semgrep-env/
+wrangler.jsonc
