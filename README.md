@@ -98,6 +98,64 @@ pkill -f "node.*vite"
 # 이후 백엔드, 프론트엔드 순서로 재시작
 ```
 
+## 클라우드 배포 방법
+
+### 백엔드 (Cloudflare Workers)
+
+**1단계: 프로덕션 시크릿 등록 (최초 1회)**
+
+```bash
+cd backend
+wrangler secret put TURSO_DB_URL
+wrangler secret put TURSO_AUTH_TOKEN
+wrangler secret put SUPABASE_JWT_SECRET
+wrangler secret put GROQ_API_KEY
+```
+
+각 명령어 실행 후 터미널에 값을 입력하면 됩니다. 등록된 시크릿은 Cloudflare 대시보드 → Workers → 해당 Worker → Settings → Variables에서 확인할 수 있습니다.
+
+**2단계: 배포**
+
+```bash
+cd backend
+npm run deploy
+```
+
+---
+
+### 프론트엔드 (Cloudflare Pages)
+
+#### 방법 1: GitHub 연동 자동 배포 (권장)
+
+1. Cloudflare 대시보드 → Pages → 프로젝트 생성 → GitHub 저장소 연결
+2. 빌드 설정:
+
+| 항목 | 값 |
+| --- | --- |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+| Root directory | `frontend` |
+
+3. 환경 변수 등록 (`.env.production`은 gitignore 되어 있어 Pages 빌드 환경에 없으므로 직접 입력):
+
+| 키 | 값 |
+| --- | --- |
+| `VITE_SUPABASE_URL` | Supabase 프로젝트 URL |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
+| `VITE_API_BASE_URL` | `https://backend.fastsaas2.workers.dev` |
+
+이후 `main` 브랜치에 push할 때마다 자동으로 빌드 및 배포됩니다.
+
+#### 방법 2: 로컬 빌드 후 수동 배포
+
+`.env.production`을 로컬에서 직접 읽어 빌드하므로 Pages 환경변수 설정이 필요 없습니다.
+
+```bash
+cd frontend
+npm run build
+npx wrangler pages deploy dist --project-name=fastsaas02-track01-1
+```
+
 ## 기타 명령어
 
 | 명령어 | 위치 | 설명 |
