@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
+import { ZodError } from 'zod';
 import { getDb, Env } from '../db/index';
 import { transactions } from '../db/schema';
 import type { Variables } from '../middleware/auth';
 import { AIService } from '../services/ai';
 import {
-  validateAIResponse,
   validateCreatePayload,
   validateUpdatePayload,
   validateReadPayload,
@@ -17,12 +17,53 @@ import {
 import * as messages from '../services/messages';
 import { saveMessage, getChatHistory, clearChatHistory } from '../services/chat';
 import { AIReportService } from '../services/ai-report';
+import type { ActionType } from '../types/ai';
 import { and, eq, isNull, desc, sql } from 'drizzle-orm';
 
 const router = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-// Initialize AI service
-let aiService: AIService;
+function isAIServiceError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AIServiceError';
+}
+
+function isClientError(error: unknown): boolean {
+  if (error instanceof ZodError || error instanceof SyntaxError) {
+    return true;
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return [
+    /^Text input is required$/,
+    /^Transaction ID is required/,
+    /^Amount must /,
+    /^Amount exceeds /,
+    /^Invalid date format/,
+    /^Date cannot /,
+    /^Category cannot /,
+  ].some((pattern) => pattern.test(error.message));
+}
+
+function buildMetadata(
+  actionType: ActionType,
+  extra: Record<string, unknown> = {}
+): Record<string, unknown> {
+  return {
+    actionType,
+    ...extra,
+  };
+}
+
+async function saveAssistantReply(
+  db: any,
+  userId: string,
+  message: string,
+  metadata?: Record<string, unknown>
+): Promise<void> {
+  await saveMessage(db, userId, 'assistant', message, metadata);
+}
 
 // POST /api/ai/action
 router.post('/action', async (c) => {
@@ -41,10 +82,7 @@ router.post('/action', async (c) => {
     // Save user message to chat history
     await saveMessage(db, userId, 'user', text);
 
-    // Initialize AI service once
-    if (!aiService) {
-      aiService = new AIService(c.env.GEMINI_API_KEY);
-    }
+    const aiService = new AIService(c.env.GROQ_API_KEY, c.env.GROQ_MODEL_NAME);
 
     // Fetch user context
     const recentTransactions = await db
@@ -85,11 +123,25 @@ router.post('/action', async (c) => {
           .returning();
 
         const tx = result[0];
+        const message = messages.generateCreateMessage(tx);
+        const metadata = buildMetadata('create', {
+          action: {
+            id: tx.id,
+            date: tx.date,
+            category: tx.category,
+            amount: tx.amount,
+            type: tx.type,
+          },
+        });
+        await saveAssistantReply(db, userId, message, metadata);
+
         return c.json({
           success: true,
           type: 'create',
           result: tx,
-          message: messages.generateCreateMessage(tx),
+          message,
+          content: message,
+          metadata,
         });
       }
 
@@ -131,11 +183,25 @@ router.post('/action', async (c) => {
           .returning();
 
         const tx = result[0];
+        const message = messages.generateUpdateMessage(tx);
+        const metadata = buildMetadata('update', {
+          action: {
+            id: tx.id,
+            date: tx.date,
+            category: tx.category,
+            amount: tx.amount,
+            type: tx.type,
+          },
+        });
+        await saveAssistantReply(db, userId, message, metadata);
+
         return c.json({
           success: true,
           type: 'update',
           result: tx,
-          message: messages.generateUpdateMessage(tx),
+          message,
+          content: message,
+          metadata,
         });
       }
 
@@ -166,12 +232,24 @@ router.post('/action', async (c) => {
           .orderBy(desc(transactions.date));
 
         const totalAmount = results.reduce((sum, t) => sum + t.amount, 0);
+        const message = messages.generateReadMessage(results, totalAmount, payload);
+        const metadata = buildMetadata('read', {
+          action: {
+            month,
+            category: payload.category || null,
+            type: payload.type || null,
+            count: results.length,
+          },
+        });
+        await saveAssistantReply(db, userId, message, metadata);
 
         return c.json({
           success: true,
           type: 'read',
           result: results,
-          message: messages.generateReadMessage(results, totalAmount, payload),
+          message,
+          content: message,
+          metadata,
         });
       }
 
@@ -202,11 +280,25 @@ router.post('/action', async (c) => {
           .set({ deletedAt: new Date().toISOString() })
           .where(eq(transactions.id, payload.id));
 
+        const message = messages.generateDeleteMessage(tx);
+        const metadata = buildMetadata('delete', {
+          action: {
+            id: tx.id,
+            date: tx.date,
+            category: tx.category,
+            amount: tx.amount,
+            type: tx.type,
+          },
+        });
+        await saveAssistantReply(db, userId, message, metadata);
+
         return c.json({
           success: true,
           type: 'delete',
           result: { id: tx.id },
-          message: messages.generateDeleteMessage(tx),
+          message,
+          content: message,
+          metadata,
         });
       }
 
@@ -215,22 +307,30 @@ router.post('/action', async (c) => {
         const reportPayload = validateReportPayload(action.payload);
 
         // Initialize report service
-        const reportService = new AIReportService(c.env.GEMINI_API_KEY);
+        const reportService = new AIReportService(c.env.GROQ_API_KEY, c.env.GROQ_MODEL_NAME);
 
         // Generate report
         const report = await reportService.generateReport(db, userId, reportPayload);
 
         // Format as chat message
         const { content, metadata } = messages.generateReportMessage(report);
+        const responseMetadata = {
+          ...metadata,
+          report: {
+            ...report,
+            params: reportPayload.params || {},
+          },
+        };
 
         // Save assistant message to database
-        await saveMessage(db, userId, 'assistant', content, metadata);
+        await saveAssistantReply(db, userId, content, responseMetadata);
 
         return c.json({
           success: true,
-          action: 'report',
+          type: 'report',
+          message: content,
           content,
-          metadata,
+          metadata: responseMetadata,
         });
       }
 
@@ -243,9 +343,10 @@ router.post('/action', async (c) => {
   } catch (error) {
     console.error('AI action error:', error);
     const message = error instanceof Error ? error.message : 'Failed to process request';
+    const status = isAIServiceError(error) ? 502 : isClientError(error) ? 400 : 500;
     return c.json(
       { success: false, error: message },
-      400
+      status
     );
   }
 });
