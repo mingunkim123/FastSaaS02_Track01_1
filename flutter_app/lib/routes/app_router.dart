@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_app/shared/providers/auth_provider.dart';
 import 'package:flutter_app/shared/widgets/bottom_nav_shell.dart';
 import 'package:flutter_app/features/calendar/calendar_page.dart';
+import 'package:flutter_app/features/ai_chat/ai_chat_page.dart';
 
 // Placeholder screen widgets - will be replaced with actual pages
 class LoginPage extends StatelessWidget {
@@ -43,17 +44,6 @@ class StatsPage extends StatelessWidget {
   }
 }
 
-class AIPage extends StatelessWidget {
-  const AIPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('AI')),
-      body: const Center(child: Text('AI Page')),
-    );
-  }
-}
 
 /// Go Router configuration
 /// Defines all routes and navigation logic for the app
@@ -120,11 +110,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const StatsPage(),
           ),
 
-          // AI route
+          // AI Chat route
           GoRoute(
             path: '/ai',
             name: 'ai',
-            builder: (context, state) => const AIPage(),
+            builder: (context, state) => const AIChatPage(),
           ),
         ],
       ),
