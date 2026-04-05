@@ -15,7 +15,17 @@ export interface LLMMessage {
  * Unified LLM caller supporting Groq and Gemini providers.
  * Returns the text content of the model's response.
  */
-export async function callLLM(messages: LLMMessage[], config: LLMConfig): Promise<string> {
+export async function callLLM(
+  messages: LLMMessage[],
+  config: LLMConfig,
+  ai?: any // Optional Cloudflare Workers AI binding
+): Promise<string> {
+  if (config.provider === 'workers-ai') {
+    if (!ai) {
+      throw new Error('Workers AI binding not available in environment');
+    }
+    return callWorkersAI(messages, config, ai);
+  }
   if (config.provider === 'gemini') {
     return callGemini(messages, config);
   }
