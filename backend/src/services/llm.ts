@@ -19,6 +19,9 @@ export async function callLLM(messages: LLMMessage[], config: LLMConfig): Promis
   if (config.provider === 'gemini') {
     return callGemini(messages, config);
   }
+  if (config.provider === 'openai') {
+    return callOpenAI(messages, config);
+  }
   return callGroq(messages, config);
 }
 
@@ -44,6 +47,31 @@ async function callGroq(messages: LLMMessage[], config: LLMConfig): Promise<stri
   const data = await response.json() as { choices: { message: { content: string } }[] };
   const text = data.choices[0]?.message?.content;
   if (!text) throw new Error('No response from Groq');
+  return text;
+}
+
+async function callOpenAI(messages: LLMMessage[], config: LLMConfig): Promise<string> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: config.modelName,
+      messages,
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(`OpenAI API error: ${response.status} ${JSON.stringify(err)}`);
+  }
+
+  const data = await response.json() as { choices: { message: { content: string } }[] };
+  const text = data.choices[0]?.message?.content;
+  if (!text) throw new Error('No response from OpenAI');
   return text;
 }
 
