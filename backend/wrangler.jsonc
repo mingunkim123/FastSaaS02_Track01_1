@@ -4,7 +4,7 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2026-03-24",
 	"vars": {
-		"AI_PROVIDER": "gemini"
+		"AI_PROVIDER": "workers-ai"
 	},
 	"observability": {
 		"logs": {
@@ -37,9 +37,9 @@
 	//     "database_id": ""
 	//   }
 	// ],
-	// "ai": {
-	//   "binding": "AI"
-	// },
+	"ai": {
+		"binding": "AI"
+	},
 	// "observability": {
 	//   "enabled": true,
 	//   "head_sampling_rate": 1
