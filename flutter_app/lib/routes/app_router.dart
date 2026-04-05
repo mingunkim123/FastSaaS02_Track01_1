@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_app/shared/providers/auth_provider.dart';
 import 'package:flutter_app/shared/widgets/bottom_nav_shell.dart';
+import 'package:flutter_app/features/calendar/calendar_page.dart';
 
 // Placeholder screen widgets - will be replaced with actual pages
 class LoginPage extends StatelessWidget {
@@ -29,17 +30,6 @@ class RecordPage extends StatelessWidget {
   }
 }
 
-class CalendarPage extends StatelessWidget {
-  const CalendarPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('달력')),
-      body: const Center(child: Text('Calendar Page')),
-    );
-  }
-}
 
 class StatsPage extends StatelessWidget {
   const StatsPage({super.key});
