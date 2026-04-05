@@ -1,4 +1,4 @@
-export type LLMProvider = 'groq' | 'gemini';
+export type LLMProvider = 'groq' | 'gemini' | 'openai';
 
 export interface LLMConfig {
   provider: LLMProvider;
@@ -97,7 +97,7 @@ export function getLLMConfig(env: {
     return {
       provider: 'gemini',
       apiKey: env.GEMINI_API_KEY,
-      modelName: env.GEMINI_MODEL_NAME || 'gemini-2.0-flash',
+      modelName: env.GEMINI_MODEL_NAME || 'gemini-2.5-flash',
     };
   }
   return {
