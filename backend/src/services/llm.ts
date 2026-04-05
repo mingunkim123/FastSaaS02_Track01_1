@@ -173,6 +173,7 @@ async function callWorkersAI(
 
 /**
  * Build LLMConfig from environment variables.
+ * If AI_PROVIDER is 'workers-ai', uses Cloudflare Workers AI.
  * If AI_PROVIDER is 'openai' and OPENAI_API_KEY is set, uses OpenAI.
  * If AI_PROVIDER is 'gemini' and GEMINI_API_KEY is set, uses Gemini.
  * Otherwise falls back to Groq.
@@ -185,12 +186,20 @@ export function getLLMConfig(env: {
   GEMINI_MODEL_NAME?: string;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL_NAME?: string;
+  WORKERS_AI_MODEL_NAME?: string;
 }): LLMConfig {
+  if (env.AI_PROVIDER === 'workers-ai') {
+    return {
+      provider: 'workers-ai',
+      apiKey: '', // Not used for Workers AI
+      modelName: env.WORKERS_AI_MODEL_NAME || '@cf/meta/llama-2-7b-chat-int8',
+    };
+  }
   if (env.AI_PROVIDER === 'openai' && env.OPENAI_API_KEY) {
     return {
       provider: 'openai',
       apiKey: env.OPENAI_API_KEY,
-      modelName: env.OPENAI_MODEL_NAME || 'gpt-5.4-nano-2026-03-17',
+      modelName: env.OPENAI_MODEL_NAME || 'gpt-4o-mini',
     };
   }
   if (env.AI_PROVIDER === 'gemini' && env.GEMINI_API_KEY) {
