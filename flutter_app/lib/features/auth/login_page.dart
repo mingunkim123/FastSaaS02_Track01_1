@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_app/core/theme/app_theme.dart';
 import 'package:flutter_app/shared/providers/auth_provider.dart';
 
@@ -25,14 +26,45 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     });
 
     try {
-      // For testing: use test email/password
-      // In production, replace with actual OAuth flow
-      await ref.read(signInProvider(('test@example.com', 'password123')).future);
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        clientId: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com', // Replace with your Google OAuth Client ID
+        scopes: [
+          'email',
+          'profile',
+        ],
+      );
+
+      final googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        // User cancelled sign-in
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final accessToken = googleAuth.accessToken;
+      final idToken = googleAuth.idToken;
+
+      if (idToken == null) {
+        throw Exception('Failed to get ID token from Google sign-in');
+      }
+
+      // Sign in with Supabase using ID token
+      final authService = ref.read(supabaseAuthProvider);
+      await authService.client.auth.signInWithIdToken(
+        provider: 'google',
+        idToken: idToken,
+      );
+
       if (mounted) {
         context.go('/record');
       }
     } catch (e) {
-      _showErrorSnackBar('로그인 실패: ${e.toString()}');
+      _showErrorSnackBar('Google 로그인 실패: ${e.toString()}');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -49,11 +81,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     });
 
     try {
-      // For testing: use test email/password
-      // In production, replace with actual Kakao OAuth flow
-      await ref.read(signInProvider(('test@example.com', 'password123')).future);
+      // TODO: Implement Kakao OAuth sign-in
+      // Requires: kakao_flutter_sdk or custom implementation
+      // For now, showing a message that this feature is coming soon
+      _showErrorSnackBar('카카오 로그인은 준비 중입니다.');
       if (mounted) {
-        context.go('/record');
+        setState(() {
+          _isLoading = false;
+        });
       }
     } catch (e) {
       _showErrorSnackBar('카카오 로그인 실패: ${e.toString()}');
