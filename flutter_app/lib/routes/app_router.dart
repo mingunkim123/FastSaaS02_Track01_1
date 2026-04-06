@@ -3,46 +3,11 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_app/shared/providers/auth_provider.dart';
 import 'package:flutter_app/shared/widgets/bottom_nav_shell.dart';
+import 'package:flutter_app/features/auth/login_page.dart';
+import 'package:flutter_app/features/record/record_page.dart';
 import 'package:flutter_app/features/calendar/calendar_page.dart';
+import 'package:flutter_app/features/stats/stats_page.dart';
 import 'package:flutter_app/features/ai_chat/ai_chat_page.dart';
-
-// Placeholder screen widgets - will be replaced with actual pages
-class LoginPage extends StatelessWidget {
-  const LoginPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('로그인')),
-      body: const Center(child: Text('Login Page')),
-    );
-  }
-}
-
-class RecordPage extends StatelessWidget {
-  const RecordPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('기록')),
-      body: const Center(child: Text('Record Page')),
-    );
-  }
-}
-
-
-class StatsPage extends StatelessWidget {
-  const StatsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('통계')),
-      body: const Center(child: Text('Stats Page')),
-    );
-  }
-}
 
 
 /// Go Router configuration
@@ -52,7 +17,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
 
   return GoRouter(
-    initialLocation: '/record',
+    initialLocation: '/login',
     debugLogDiagnostics: true,
     redirect: (context, state) {
       // Check if the auth state is loading
@@ -81,6 +46,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '/login',
         name: 'login',
         builder: (context, state) => const LoginPage(),
+      ),
+      // Placeholder root route
+      GoRoute(
+        path: '/',
+        redirect: (context, state) => '/login',
       ),
 
       // Shell route for authenticated pages with bottom navigation

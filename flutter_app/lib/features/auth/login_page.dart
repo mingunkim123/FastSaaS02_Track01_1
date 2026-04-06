@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_app/core/theme/app_theme.dart';
+import 'package:flutter_app/shared/providers/auth_provider.dart';
 
 /// Login page with OAuth sign-in options (Google and Kakao)
 /// Displays centered layout with app title and OAuth buttons
@@ -23,25 +24,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     });
 
     try {
-      // TODO: Implement Google OAuth sign-in
-      // Requires: Google OAuth configuration in Supabase console
-      // Steps:
-      // 1. Set up Google OAuth app in Google Cloud Console
-      // 2. Add OAuth Credential (Web Client ID) to Supabase Auth providers
-      // 3. Configure redirect URI: [APP_URL]/auth/v1/callback
-      // 4. Use supabaseAuthProvider to call signInWithOAuth
-      //
-      // Example implementation:
-      // final authService = ref.read(supabaseAuthProvider);
-      // await authService.client.auth.signInWithOAuth(
-      //   'google',
-      //   redirectTo: 'com.fastsaas02.app://auth/callback',
-      // );
-
-      _showErrorSnackBar('Google OAuth is not yet configured');
+      final authService = ref.read(supabaseAuthProvider);
+      await authService.client.auth.signInWithOAuth(
+        'google',
+        redirectTo: 'com.fastsaas02.app://auth/callback',
+      );
     } catch (e) {
       _showErrorSnackBar('Google sign-in failed: ${e.toString()}');
-    } finally {
       if (mounted) {
         setState(() {
           _isLoading = false;
