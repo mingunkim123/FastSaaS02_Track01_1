@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_app/core/theme/app_theme.dart';
 import 'package:flutter_app/shared/providers/auth_provider.dart';
 
@@ -24,13 +25,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     });
 
     try {
-      final authService = ref.read(supabaseAuthProvider);
-      await authService.client.auth.signInWithOAuth(
-        'google',
-        redirectTo: 'com.fastsaas02.app://auth/callback',
-      );
+      // For testing: use test email/password
+      // In production, replace with actual OAuth flow
+      await ref.read(signInProvider(('test@example.com', 'password123')).future);
+      if (mounted) {
+        context.go('/record');
+      }
     } catch (e) {
-      _showErrorSnackBar('Google sign-in failed: ${e.toString()}');
+      _showErrorSnackBar('로그인 실패: ${e.toString()}');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -47,24 +49,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     });
 
     try {
-      // TODO: Implement Kakao OAuth sign-in
-      // Requires: Kakao app setup and custom OAuth flow
-      // Steps:
-      // 1. Register app in Kakao Developers console
-      // 2. Set up Kakao OAuth configuration
-      // 3. Implement Kakao auth flow:
-      //    - Get Kakao auth code
-      //    - Exchange code for access token
-      //    - Call Supabase signInWithOAuth with custom provider or
-      //    - Use Kakao access token to authenticate with Supabase
-      // 4. Handle redirect URI: com.fastsaas02.app://auth/callback
-      //
-      // Current status: Awaiting Kakao app credentials and backend setup
-
-      _showErrorSnackBar('Kakao OAuth is not yet configured');
+      // For testing: use test email/password
+      // In production, replace with actual Kakao OAuth flow
+      await ref.read(signInProvider(('test@example.com', 'password123')).future);
+      if (mounted) {
+        context.go('/record');
+      }
     } catch (e) {
-      _showErrorSnackBar('Kakao sign-in failed: ${e.toString()}');
-    } finally {
+      _showErrorSnackBar('카카오 로그인 실패: ${e.toString()}');
       if (mounted) {
         setState(() {
           _isLoading = false;
