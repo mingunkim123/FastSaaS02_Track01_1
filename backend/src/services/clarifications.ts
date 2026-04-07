@@ -2,6 +2,9 @@ import { clarificationSessions } from '../db/schema';
 import { eq, and, lt } from 'drizzle-orm';
 import crypto from 'crypto';
 
+// Valid transaction categories (must match validation.ts)
+const VALID_CATEGORIES = ['food', 'transport', 'work', 'shopping', 'entertainment', 'utilities', 'medicine', 'other'] as const;
+
 export interface ClarificationState {
   missingFields: string[];
   partialData: {
@@ -37,6 +40,7 @@ export class ClarificationService {
 
   /**
    * Get active clarification for a chat session
+   * Only one clarification can be active per user+session combination
    */
   async getClarification(
     db: any,
@@ -55,11 +59,18 @@ export class ClarificationService {
       .limit(1);
 
     if (result.length === 0) return null;
-    return JSON.parse(result[0].state) as ClarificationState;
+
+    try {
+      return JSON.parse(result[0].state) as ClarificationState;
+    } catch (error) {
+      console.error(`Failed to parse clarification state for user ${userId}, session ${chatSessionId}:`, error);
+      return null;
+    }
   }
 
   /**
    * Merge user's clarification response with partial data
+   * Extracts missing fields (amount, category, transactionType) from user input
    * Returns updated partial data and remaining missing fields
    */
   async mergeClarificationResponse(
@@ -71,21 +82,25 @@ export class ClarificationService {
   }> {
     const { missingFields, partialData } = currentState;
     const mergedData = { ...partialData };
+    const lowerResponse = userResponse.toLowerCase().trim();
 
     // Try to extract amount if it's missing
     if (missingFields.includes('amount')) {
-      const amountMatch = userResponse.match(/(\d+)/);
+      const amountMatch = lowerResponse.match(/(\d+)/);
       if (amountMatch) {
-        mergedData.amount = parseInt(amountMatch[1], 10);
+        const amount = parseInt(amountMatch[1], 10);
+        // Validate amount is positive
+        if (amount > 0 && amount <= 1000000000) {
+          mergedData.amount = amount;
+        }
       }
     }
 
     // Try to extract category if it's missing
     if (missingFields.includes('category')) {
-      const categories = ['food', 'transport', 'work', 'shopping', 'entertainment', 'utilities', 'medicine', 'other'];
-      for (const cat of categories) {
-        if (userResponse.toLowerCase().includes(cat)) {
-          mergedData.category = cat as any;
+      for (const cat of VALID_CATEGORIES) {
+        if (lowerResponse.includes(cat)) {
+          mergedData.category = cat;
           break;
         }
       }
@@ -93,9 +108,9 @@ export class ClarificationService {
 
     // Try to extract transactionType if it's missing
     if (missingFields.includes('transactionType')) {
-      if (userResponse.toLowerCase().includes('expense') || userResponse.toLowerCase().includes('지출') || userResponse.toLowerCase().includes('썼')) {
+      if (lowerResponse.includes('expense') || lowerResponse.includes('지출') || lowerResponse.includes('썼')) {
         mergedData.transactionType = 'expense';
-      } else if (userResponse.toLowerCase().includes('income') || userResponse.toLowerCase().includes('수입') || userResponse.toLowerCase().includes('받')) {
+      } else if (lowerResponse.includes('income') || lowerResponse.includes('수입') || lowerResponse.includes('받')) {
         mergedData.transactionType = 'income';
       }
     }
@@ -128,6 +143,8 @@ export class ClarificationService {
 
   /**
    * Clean up expired clarifications (> 5 minutes old)
+   * Should be called periodically (e.g., every 10 minutes) to prevent stale sessions
+   * Prevents users being stuck in a clarification state if they abandon the chat
    */
   async cleanupExpired(db: any): Promise<void> {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
