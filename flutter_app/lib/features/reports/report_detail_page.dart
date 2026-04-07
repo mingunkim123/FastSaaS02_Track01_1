@@ -1,0 +1,213 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../shared/models/report.dart';
+import '../../shared/providers/report_provider.dart';
+import '../ai_chat/widgets/report_card.dart';
+
+class ReportDetailPage extends ConsumerStatefulWidget {
+  final int reportId;
+  final bool isFromStats;
+
+  const ReportDetailPage({
+    Key? key,
+    required this.reportId,
+    this.isFromStats = false,
+  }) : super(key: key);
+
+  @override
+  ConsumerState<ReportDetailPage> createState() => _ReportDetailPageState();
+}
+
+class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
+  bool _isSaving = false;
+  bool _isDeleting = false;
+
+  void _handleSaveReport(ReportDetail report) async {
+    setState(() => _isSaving = true);
+
+    try {
+      final reportData = Report(
+        reportType: report.reportType,
+        title: report.title,
+        subtitle: report.subtitle,
+        reportData: report.reportData,
+        params: report.params,
+      );
+
+      await ref.read(saveReportProvider(reportData).future);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('리포트가 저장되었습니다')),
+        );
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('저장 실패: $e')),
+        );
+      }
+    } finally {
+      setState(() => _isSaving = false);
+    }
+  }
+
+  void _handleDeleteReport() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('리포트 삭제'),
+        content: const Text('이 리포트를 삭제하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isDeleting = true);
+
+    try {
+      await ref.read(deleteReportProvider(widget.reportId).future);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('리포트가 삭제되었습니다')),
+        );
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('삭제 실패: $e')),
+        );
+      }
+    } finally {
+      setState(() => _isDeleting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reportAsync = ref.watch(getReportDetailProvider(widget.reportId));
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('리포트'),
+      ),
+      body: reportAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stack) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('오류: $error'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => ref.refresh(getReportDetailProvider(widget.reportId)),
+                child: const Text('재시도'),
+              ),
+            ],
+          ),
+        ),
+        data: (report) => CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      report.title,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    if (report.subtitle != null && report.subtitle!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          report.subtitle!,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            if (report.reportData.isNotEmpty)
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final entries = report.reportData.entries.toList();
+                    final entry = entries[index];
+                    final value = entry.value;
+
+                    if (value is Map<String, dynamic>) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: ReportCard(section: value),
+                      );
+                    }
+
+                    return Container();
+                  },
+                  childCount: report.reportData.length,
+                ),
+              ),
+            SliverPadding(
+              padding: const EdgeInsets.all(16),
+              sliver: SliverToBoxAdapter(
+                child: const SizedBox.shrink(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: reportAsync.whenData(
+        (report) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: widget.isFromStats
+                ? Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isDeleting ? null : _handleDeleteReport,
+                          icon: const Icon(Icons.delete),
+                          label: const Text('삭제하기'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('닫기'),
+                        ),
+                      ),
+                    ],
+                  )
+                : ElevatedButton(
+                    onPressed: _isSaving ? null : () => _handleSaveReport(report),
+                    child: _isSaving
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('저장하기'),
+                  ),
+          ),
+        ),
+      ).value,
+    );
+  }
+}
