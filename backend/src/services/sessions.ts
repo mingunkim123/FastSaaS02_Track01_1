@@ -92,7 +92,7 @@ export async function getSession(
  * @param sessionId - Session ID
  * @param userId - User ID (for ownership validation)
  * @param newTitle - New session title
- * @returns Updated session object
+ * @returns Updated session object or null if not found/unauthorized
  */
 export async function renameSession(
   db: any,
@@ -105,7 +105,7 @@ export async function renameSession(
   title: string;
   createdAt: string;
   updatedAt: string;
-}> {
+} | null> {
   const result = await db
     .update(db.sessions)
     .set({
@@ -121,7 +121,7 @@ export async function renameSession(
     .returning()
     .get();
 
-  return result;
+  return result || null;
 }
 
 /**

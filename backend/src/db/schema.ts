@@ -35,6 +35,15 @@ export const chatMessages = sqliteTable('chat_messages', {
     createdAt: text('created_at').default(sql`(datetime('now'))`), // 메시지 생성 시간 (자동)
 });
 
+// Chat sessions for organizing conversations
+export const sessions = sqliteTable('sessions', {
+    id:        integer('id').primaryKey({ autoIncrement: true }),
+    userId:    text('user_id').notNull().references(() => users.id),
+    title:     text('title').notNull(),
+    createdAt: text('created_at').default(sql`(datetime('now'))`),
+    updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+});
+
 // AI 생성 리포트
 export const reports = sqliteTable('reports', {
     id: integer('id').primaryKey({ autoIncrement: true }),
@@ -57,3 +66,5 @@ export type ChatMessage = typeof chatMessages.$inferSelect;
 export type NewChatMessage = typeof chatMessages.$inferInsert;
 export type Report = typeof reports.$inferSelect;
 export type NewReport = typeof reports.$inferInsert;
+export type Session = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
