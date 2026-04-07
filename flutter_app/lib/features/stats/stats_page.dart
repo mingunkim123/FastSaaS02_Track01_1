@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_app/core/theme/app_theme.dart';
 import 'package:flutter_app/shared/providers/transaction_provider.dart';
 import 'package:flutter_app/shared/models/summary_row.dart';
@@ -19,6 +20,27 @@ class _StatsPageState extends ConsumerState<StatsPage> {
   void initState() {
     super.initState();
     _selectedDate = DateTime.now();
+
+    // Check for month query parameter from AI action button
+    Future.microtask(() {
+      final monthStr = GoRouterState.of(context).uri.queryParameters['month'];
+      if (monthStr != null) {
+        try {
+          // monthStr is in YYYY-MM format, parse to first day of month
+          final parts = monthStr.split('-');
+          if (parts.length == 2) {
+            final year = int.parse(parts[0]);
+            final month = int.parse(parts[1]);
+            final date = DateTime(year, month);
+            setState(() {
+              _selectedDate = date;
+            });
+          }
+        } catch (e) {
+          // Invalid month format, ignore and use current month
+        }
+      }
+    });
   }
 
   String _formatMonthYear(DateTime date) {
