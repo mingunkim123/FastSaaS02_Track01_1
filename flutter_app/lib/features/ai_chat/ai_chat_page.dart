@@ -190,6 +190,11 @@ class _AIChatPageState extends ConsumerState<AIChatPage> {
       ),
     );
 
+    // Scroll to bottom after layout
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
+
     return Column(
       children: [
         Expanded(

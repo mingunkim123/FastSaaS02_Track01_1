@@ -163,12 +163,12 @@ class _RecordPageState extends ConsumerState<RecordPage> {
       final dateStr =
           '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
 
-      final transactionData = {
-        'type': _transactionType,
+      final transactionData = <String, dynamic>{
+        'transactionType': _transactionType,
         'amount': amount,
         'category': _selectedCategory,
         'date': dateStr,
-        'memo': _memo.isNotEmpty ? _memo : null,
+        if (_memo.isNotEmpty) 'memo': _memo,
       };
 
       // Call the addTransactionProvider

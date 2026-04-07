@@ -103,6 +103,8 @@ final addTransactionProvider = FutureProvider.family<int, Map<String, dynamic>>(
     final id = await apiClient.addTransaction(data);
 
     // Invalidate related providers to refresh data
+    // Invalidate the family provider with all possible parameters
+    ref.invalidate(transactionsProvider);
     ref.invalidate(allTransactionsProvider);
 
     // Invalidate summary providers (all months)
@@ -135,6 +137,7 @@ final deleteTransactionProvider = FutureProvider.family<bool, String>((ref, id) 
     final success = await apiClient.deleteTransaction(id);
 
     // Invalidate related providers to refresh data
+    ref.invalidate(transactionsProvider);
     ref.invalidate(allTransactionsProvider);
 
     // Invalidate summary providers (all months)

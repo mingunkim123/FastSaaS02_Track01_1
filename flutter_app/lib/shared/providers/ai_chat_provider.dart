@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_app/shared/models/chat_message.dart';
 import 'api_provider.dart';
+import 'transaction_provider.dart';
 
 /// Provider for fetching chat history
 /// Returns: List<ChatMessage>
@@ -57,6 +58,12 @@ final sendAIMessageProvider =
 
     // Invalidate chat history to refresh
     ref.invalidate(getChatHistoryProvider);
+
+    // Invalidate transaction providers to refresh calendar/stats
+    // (AI may have created, updated, or deleted transactions)
+    ref.invalidate(transactionsProvider);
+    ref.invalidate(allTransactionsProvider);
+    ref.invalidate(summaryProvider);
 
     return assistantMessage;
   } catch (e) {

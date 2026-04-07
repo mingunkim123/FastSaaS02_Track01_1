@@ -7,11 +7,11 @@ export type Env = {
     TURSO_DB_URL: string;
     TURSO_AUTH_TOKEN: string;
     SUPABASE_JWT_SECRET: string;
-    GROQ_API_KEY: string;
-    GROQ_MODEL_NAME?: string;
+    // GROQ_API_KEY: string;
+    // GROQ_MODEL_NAME?: string;
     GEMINI_API_KEY?: string;
     GEMINI_MODEL_NAME?: string;
-    AI_PROVIDER?: 'groq' | 'gemini' | 'workers-ai'; // defaults to 'groq'
+    AI_PROVIDER?: 'gemini' | 'workers-ai'; // defaults to 'workers-ai'
     AI?: any; // Cloudflare Workers AI binding
 };
 

@@ -284,12 +284,15 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                           selectedBuilder: (context, day, focusedDay) {
                             final indicators = _getIndicatorColors(day, monthTransactions);
                             return Container(
+                              width: 40,
+                              height: 40,
                               decoration: const BoxDecoration(
                                 color: AppTheme.primaryColor,
                                 shape: BoxShape.circle,
                               ),
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
                                     '${day.day}',
@@ -301,16 +304,17 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                                   ),
                                   if (indicators.isNotEmpty)
                                     Padding(
-                                      padding: const EdgeInsets.only(top: 4),
+                                      padding: const EdgeInsets.only(top: 2),
                                       child: Row(
                                         mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisSize: MainAxisSize.min,
                                         children: indicators
                                             .asMap()
                                             .entries
                                             .map(
                                               (e) => Container(
-                                                width: 4,
-                                                height: 4,
+                                                width: 3,
+                                                height: 3,
                                                 margin: const EdgeInsets.symmetric(
                                                   horizontal: 1,
                                                 ),
