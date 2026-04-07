@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_app/shared/models/transaction.dart';
 import 'package:flutter_app/shared/providers/transaction_provider.dart';
 import 'package:flutter_app/core/theme/app_theme.dart';
@@ -25,6 +26,22 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     super.initState();
     _selectedDate = DateTime.now();
     _focusedDate = DateTime.now();
+
+    // Check for date query parameter from AI action button
+    Future.microtask(() {
+      final dateStr = GoRouterState.of(context).uri.queryParameters['date'];
+      if (dateStr != null) {
+        try {
+          final date = DateTime.parse(dateStr);
+          setState(() {
+            _selectedDate = date;
+            _focusedDate = date;
+          });
+        } catch (e) {
+          // Invalid date format, ignore and use current date
+        }
+      }
+    });
   }
 
   /// Get the formatted date string for API calls (YYYY-MM-DD)
