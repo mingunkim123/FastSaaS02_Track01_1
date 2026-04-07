@@ -203,27 +203,3 @@ class ApiClient {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 }
-
-/// Provider for Dio instance
-final dioProvider = Provider<Dio>((ref) {
-  final dio = Dio(
-    BaseOptions(
-      baseUrl: AppConstants.apiBaseUrl,
-      connectTimeout: Duration(seconds: AppConstants.connectTimeoutSeconds),
-      receiveTimeout: Duration(seconds: AppConstants.apiTimeoutSeconds),
-      contentType: Headers.jsonContentType,
-      responseType: ResponseType.json,
-    ),
-  );
-
-  // Add logging interceptor
-  dio.interceptors.add(LoggingInterceptor());
-
-  return dio;
-});
-
-/// Provider for API Client
-final apiClientProvider = Provider<ApiClient>((ref) {
-  final dio = ref.watch(dioProvider);
-  return ApiClient(dio: dio);
-});

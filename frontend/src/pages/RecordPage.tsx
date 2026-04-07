@@ -44,7 +44,7 @@ export default function RecordPage() {
             <h1 className="text-2xl font-bold mb-6 text-gray-800">지출/수입 기록</h1>
 
             {/* 지출/수입 선택 탭 */}
-            <div className="flex gap-2 mb-6 bg-gray-100 p-1 rounded-lg">
+            <div className="flex flex-row gap-2 mb-6 bg-gray-100 p-1 rounded-lg">
                 <button
                     onClick={() => { setType('expense'); setCategory(EXPENSE_CATEGORIES[0]); }}
                     className={`flex-1 py-2 rounded-md font-medium transition-all ${type === 'expense' ? 'bg-white shadow text-red-500' : 'text-gray-500'

@@ -1,6 +1,7 @@
 // frontend/src/App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import AppHeader from './components/AppHeader';
 import BottomNav from './components/BottomNav';
 import RecordPage from './pages/RecordPage';
 import CalendarPage from './pages/CalendarPage';
@@ -24,7 +25,8 @@ function AppRoutes() {
 
   return (
     <BrowserRouter>
-      <div className={`max-w-[480px] mx-auto min-h-[100dvh] flex flex-col bg-[#f8f8fc] ${showNav ? 'pb-[100px]' : ''}`}>
+      <div className={`max-w-[480px] mx-auto min-h-[100dvh] flex flex-col bg-[#f8f8fc] ${showNav ? 'pb-[100px] pt-[60px]' : ''}`}>
+        <AppHeader />
         <main className="flex-1 overflow-y-auto">
           <Routes>
             <Route path="/login" element={<LoginPage />} />
