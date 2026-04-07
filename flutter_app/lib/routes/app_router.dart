@@ -8,6 +8,7 @@ import 'package:flutter_app/features/record/record_page.dart';
 import 'package:flutter_app/features/calendar/calendar_page.dart';
 import 'package:flutter_app/features/stats/stats_page.dart';
 import 'package:flutter_app/features/ai_chat/ai_chat_page.dart';
+import 'package:flutter_app/features/reports/report_detail_page.dart';
 
 
 /// Go Router configuration
@@ -51,6 +52,19 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/',
         redirect: (context, state) => '/login',
+      ),
+
+      // Report detail route
+      GoRoute(
+        path: '/report/:id',
+        builder: (context, state) {
+          final id = int.parse(state.pathParameters['id'] ?? '0');
+          final isFromStats = state.extra as bool? ?? false;
+          return ReportDetailPage(
+            reportId: id,
+            isFromStats: isFromStats,
+          );
+        },
       ),
 
       // Shell route for authenticated pages with bottom navigation
