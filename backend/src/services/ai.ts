@@ -49,7 +49,14 @@ Payload schemas for each type:
    - reportType: one of monthly_summary, category_detail, spending_pattern, anomaly, suggestion
    - params: {month: "YYYY-MM"} or {category: "food"} if specified
 
-6. PLAIN_TEXT: User sends non-financial messages (greetings, casual chat, etc.)
+6. CLARIFY: User input is ambiguous or missing critical fields (confidence < 0.7)
+   {"type":"clarify","payload":{"message":"커피를 찾았어요! 얼마를 썼나요?","missingFields":["amount"],"partialData":{"transactionType":"expense","category":"food","memo":"커피"},"confidence":0.65}
+   - message: natural Korean question asking for the missing field(s)
+   - missingFields: array of field names user needs to provide (e.g., ["amount"], ["category"], ["amount","category"])
+   - partialData: object with fields already extracted (transactionType, category, memo, date, amount - only include what you extracted)
+   - confidence: 0.3-0.7 (indicating uncertainty that requires clarification)
+
+7. PLAIN_TEXT: User sends non-financial messages (greetings, casual chat, etc.)
    {"type":"plain_text","payload":{},"confidence":0.95}
    - For ANY message that is NOT related to expense management
    - For greetings like "안녕", "hi", casual chat
@@ -66,10 +73,16 @@ Rules:
 - For PLAIN_TEXT: If the message could be financial-related OR casual, prefer financial action with lower confidence (0.5-0.7)
 
 Confidence Score Guidelines:
-- 0.95+: Very certain about the interpretation and action
-- 0.7-0.9: Reasonably confident
-- 0.3-0.7: Uncertain - user might need to clarify
-- 0.1-0.3: Very uncertain - likely a misinterpretation
+- 0.95+: Very certain about the interpretation and action (CREATE/DELETE/READ with all clear data)
+- 0.7-0.9: Reasonably confident (most CREATE/UPDATE with inferred data)
+- 0.3-0.7: Uncertain—return CLARIFY action and ask for missing field(s)
+- 0.1-0.3: Very uncertain—use CLARIFY with lower confidence (0.2-0.3)
+
+Decision Tree:
+1. Can you extract all required fields (transactionType, amount, category) with high confidence (≥0.7)? → CREATE/UPDATE/DELETE
+2. Is this clearly a non-financial message? → PLAIN_TEXT
+3. Is the message financial but missing fields or ambiguous? → CLARIFY with message asking for missing data
+4. Is the user asking for analysis or reports? → REPORT
 
 Only return valid JSON. No explanations.`;
 
