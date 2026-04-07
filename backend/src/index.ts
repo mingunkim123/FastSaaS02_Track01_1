@@ -5,6 +5,7 @@ import transactions from './routes/transactions';
 import usersRoute from './routes/users';
 import aiRouter from './routes/ai';
 import reportsRouter from './routes/reports';
+import sessionsRouter from './routes/sessions';
 import { authMiddleware } from './middleware/auth';
 import { loggingMiddleware } from './middleware/logging';
 import type { Env } from './db/index';
@@ -35,6 +36,7 @@ app.route('/api/transactions', transactions);
 app.route('/api/users', usersRoute);
 app.route('/api/ai', aiRouter);
 app.route('/api/reports', reportsRouter);
+app.route('/api/sessions', sessionsRouter);
 
 // 전역 에러 핸들러: 모든 라우트에서 발생하는 에러를 JSON으로 통일
 // ZodError (입력값 검증 실패) → 400 Bad Request
