@@ -123,7 +123,7 @@ router.post('/action', async (c) => {
     // Check if AI detected a plain text query (non-financial)
     if (action.type === 'plain_text') {
       const messageToSave = PLAIN_TEXT_FALLBACK;
-      await saveMessageToSession(db, userId, sessionId, 'assistant', messageToSave);
+      await saveMessageToSession(db, userId, sessionId, 'assistant', messageToSave, { actionType: 'plain_text' });
       return c.json(
         {
           success: true,

@@ -576,6 +576,45 @@ describe('POST /api/ai/action', () => {
   });
 
   describe('Error handling tests', () => {
+    it('should reject request without sessionId', async () => {
+      const response = await app.request(new Request('http://localhost/api/ai/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'add 5000 won expense' }),
+      }));
+
+      const body = await response.json() as any;
+
+      expect(response.status).toBe(400);
+      expect(body.error).toContain('Session ID');
+    });
+
+    it('should reject request with invalid sessionId (string)', async () => {
+      const response = await app.request(new Request('http://localhost/api/ai/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'add 5000 won expense', sessionId: 'not-a-number' }),
+      }));
+
+      const body = await response.json() as any;
+
+      expect(response.status).toBe(400);
+      expect(body.error).toContain('Session ID');
+    });
+
+    it('should reject request with invalid sessionId (null)', async () => {
+      const response = await app.request(new Request('http://localhost/api/ai/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'add 5000 won expense', sessionId: null }),
+      }));
+
+      const body = await response.json() as any;
+
+      expect(response.status).toBe(400);
+      expect(body.error).toContain('Session ID');
+    });
+
     it('returns 400 error for missing text input', async () => {
       const response = await app.request(new Request('http://localhost/api/ai/action', {
         method: 'POST',
@@ -638,6 +677,35 @@ describe('POST /api/ai/action', () => {
       expect(response.status).toBe(400);
       expect(body.success).toBe(false);
       expect(body.error).toBeTruthy();
+    });
+
+    it('should handle plain_text action type without transaction processing', async () => {
+      // Mock AI response for plain text (non-financial query like "안녕")
+      mockDb.all = vi.fn().mockResolvedValue([]);
+      mockDb.selectDistinct.mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValueOnce([]),
+        }),
+      });
+
+      mockAiInstance.parseUserInput.mockResolvedValue({
+        type: 'plain_text',
+        payload: {},
+        confidence: 0.95,
+      });
+
+      const response = await app.request(new Request('http://localhost/api/ai/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'hello', sessionId: 1 }),
+      }));
+
+      const body = await response.json() as any;
+
+      expect(response.status).toBe(200);
+      expect(body.type).toBe('plain_text');
+      expect(body.success).toBe(true);
+      expect(body.message).toBeDefined();
     });
   });
 
