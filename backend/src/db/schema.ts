@@ -35,8 +35,31 @@ export const chatMessages = sqliteTable('chat_messages', {
     createdAt: text('created_at').default(sql`(datetime('now'))`), // 메시지 생성 시간 (자동)
 });
 
+// User notes for personalized context
+export const userNotes = sqliteTable('user_notes', {
+    id:        integer('id').primaryKey({ autoIncrement: true }),
+    userId:    text('user_id').notNull().references(() => users.id),
+    content:   text('content').notNull(),
+    embeddingId: text('embedding_id'),
+    createdAt: text('created_at').default(sql`(datetime('now'))`),
+    updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+});
+
+// Financial knowledge base (static, shared across users)
+export const knowledgeBase = sqliteTable('knowledge_base', {
+    id:        integer('id').primaryKey({ autoIncrement: true }),
+    content:   text('content').notNull(),
+    category:  text('category'),
+    embeddingId: text('embedding_id'),
+    createdAt: text('created_at').default(sql`(datetime('now'))`),
+});
+
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type NewChatMessage = typeof chatMessages.$inferInsert;
+export type UserNote = typeof userNotes.$inferSelect;
+export type NewUserNote = typeof userNotes.$inferInsert;
+export type KnowledgeBaseItem = typeof knowledgeBase.$inferSelect;
+export type NewKnowledgeBaseItem = typeof knowledgeBase.$inferInsert;
