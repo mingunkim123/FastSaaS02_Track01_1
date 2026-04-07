@@ -11,8 +11,11 @@ Output must be parseable by JSON.parse(). No explanations, no markdown, no extra
 
 Payload schemas for each type:
 
-1. CREATE: User records a new transaction
+1. CREATE: User records a new transaction or multiple transactions
+   Single:
    {"type":"create","payload":{"transactionType":"expense","amount":12000,"category":"food","memo":"lunch","date":"YYYY-MM-DD"},"confidence":0.95}
+   Multiple:
+   {"type":"create","payload":{"items":[{"transactionType":"expense","amount":12000,"category":"food","date":"YYYY-MM-DD"},{"transactionType":"income","amount":50000,"category":"salary","date":"YYYY-MM-DD"}]},"confidence":0.9}
    - transactionType MUST be exactly "income" or "expense" (English, lowercase)
    - Infer from context: spent/bought/paid → "expense", earned/received/salary → "income"
    - amount: positive integer (Korean Won, no commas)
@@ -20,29 +23,53 @@ Payload schemas for each type:
    - memo: short description (optional, omit if not provided)
    - date: YYYY-MM-DD, use today if not specified
 
-2. UPDATE: User modifies an existing transaction
+2. UPDATE: User modifies one or more existing transactions
+   Single:
    {"type":"update","payload":{"id":123,"amount":15000,"category":"food"},"confidence":0.9}
-   - id: transaction ID from recent transactions context
+   Multiple:
+   {"type":"update","payload":{"updates":[{"id":123,"amount":15000},{"id":124,"category":"food"}]},"confidence":0.9}
+   - id: transaction ID from recent transactions context (for single update)
+   - updates: array of updates with id + fields to change (for multiple updates)
    - Only include fields that change; transactionType must be "income" or "expense" if provided
 
 3. READ: User asks to view transactions
    {"type":"read","payload":{"month":"YYYY-MM","category":"food","type":"expense"},"confidence":0.9}
    - All fields optional; month format YYYY-MM
 
-4. DELETE: User removes a transaction
+4. DELETE: User removes one or more transactions
+   Single:
    {"type":"delete","payload":{"id":123},"confidence":0.9}
-   - id: transaction ID from recent transactions context
+   Multiple:
+   {"type":"delete","payload":{"items":[123,124,125]},"confidence":0.9}
+   - id: single transaction ID from recent transactions context
+   - items: array of transaction IDs when deleting multiple transactions (e.g., "delete all on this date")
 
 5. REPORT: User asks for financial analysis or summary
    {"type":"report","payload":{"reportType":"monthly_summary","params":{"month":"YYYY-MM"}},"confidence":0.9}
    - reportType: one of monthly_summary, category_detail, spending_pattern, anomaly, suggestion
    - params: {month: "YYYY-MM"} or {category: "food"} if specified
 
+6. PLAIN_TEXT: User sends non-financial messages (greetings, casual chat, etc.)
+   {"type":"plain_text","payload":{},"confidence":0.95}
+   - For ANY message that is NOT related to expense management
+   - For greetings like "안녕", "hi", casual chat
+   - For off-topic questions not about finances
+   - Set confidence to 0.95 (very certain this is a plain text message)
+
 Rules:
 - For currency, assume Korean Won (원)
 - If date is not specified, use today's date (YYYY-MM-DD format)
 - For UPDATE/DELETE, match transaction details to user's recent transactions if ID is ambiguous
 - Be strict about amounts—don't guess or round
+- For DELETE operations: If you're not 100% certain which transaction to delete, use a LOW confidence score (0.1-0.3)
+- For DELETE operations: If deleting multiple transactions, verify the action is clear from context (e.g., "4월 7일 모든 거래 삭제")
+- For PLAIN_TEXT: If the message could be financial-related OR casual, prefer financial action with lower confidence (0.5-0.7)
+
+Confidence Score Guidelines:
+- 0.95+: Very certain about the interpretation and action
+- 0.7-0.9: Reasonably confident
+- 0.3-0.7: Uncertain - user might need to clarify
+- 0.1-0.3: Very uncertain - likely a misinterpretation
 
 Only return valid JSON. No explanations.`;
 

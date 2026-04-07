@@ -1,5 +1,5 @@
 /** AI action types corresponding to CRUD operations and report generation */
-export type ActionType = 'create' | 'update' | 'read' | 'delete' | 'report';
+export type ActionType = 'create' | 'update' | 'read' | 'delete' | 'report' | 'plain_text';
 
 /** Parsed action from AI model with confidence score */
 export interface TransactionAction {
@@ -9,8 +9,8 @@ export interface TransactionAction {
   confidence: number;
 }
 
-/** Payload for creating a new transaction */
-export interface CreatePayload {
+/** Single transaction for creating */
+export interface CreateItem {
   transactionType: 'income' | 'expense';
   amount: number;
   category: string;
@@ -18,14 +18,39 @@ export interface CreatePayload {
   date: string;  // YYYY-MM-DD
 }
 
-/** Payload for updating an existing transaction */
-export interface UpdatePayload {
+/** Payload for creating transaction(s) - supports single or multiple */
+export interface CreatePayload {
+  // Single transaction fields
+  transactionType?: 'income' | 'expense';
+  amount?: number;
+  category?: string;
+  memo?: string;
+  date?: string;  // YYYY-MM-DD
+  // Multiple transactions
+  items?: CreateItem[];
+}
+
+/** Single transaction update */
+export interface UpdateItem {
   id: number;
   transactionType?: 'income' | 'expense';
   amount?: number;
   category?: string;
   memo?: string;
   date?: string;  // YYYY-MM-DD
+}
+
+/** Payload for updating transaction(s) - supports single or multiple */
+export interface UpdatePayload {
+  // Single update fields
+  id?: number;
+  transactionType?: 'income' | 'expense';
+  amount?: number;
+  category?: string;
+  memo?: string;
+  date?: string;  // YYYY-MM-DD
+  // Multiple updates
+  updates?: UpdateItem[];
 }
 
 /** Payload for querying transactions with optional filters */
@@ -35,9 +60,17 @@ export interface ReadPayload {
   type?: 'income' | 'expense';
 }
 
-/** Payload for deleting a transaction */
-export interface DeletePayload {
+/** Single item for deletion */
+export interface DeleteItem {
   id: number;
+}
+
+/** Payload for deleting transaction(s) - supports single or multiple */
+export interface DeletePayload {
+  // Single delete
+  id?: number;
+  // Multiple deletes
+  items?: number[];
   reason?: string;
 }
 
