@@ -1,0 +1,169 @@
+import { and, eq, desc } from 'drizzle-orm';
+
+/**
+ * Create a new session for a user
+ * @param db - Database instance
+ * @param userId - User ID
+ * @param title - Session title (auto-generated from first message or user-provided)
+ * @returns Created session object with id, title, createdAt
+ */
+export async function createSession(
+  db: any,
+  userId: string,
+  title: string
+): Promise<{ id: number; userId: string; title: string; createdAt: string }> {
+  // Note: User will create the sessions table via migration
+  // This function assumes the table exists
+  const result = await db
+    .insert(db.sessions)
+    .values({
+      userId,
+      title,
+    })
+    .returning()
+    .get();
+
+  return result;
+}
+
+/**
+ * List all sessions for a user, ordered by most recent first
+ * @param db - Database instance
+ * @param userId - User ID
+ * @returns Array of sessions with metadata
+ */
+export async function listSessions(
+  db: any,
+  userId: string
+): Promise<
+  Array<{
+    id: number;
+    userId: string;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+  }>
+> {
+  const sessions = await db
+    .select()
+    .from(db.sessions)
+    .where(eq(db.sessions.userId, userId))
+    .orderBy(desc(db.sessions.updatedAt))
+    .all();
+
+  return sessions;
+}
+
+/**
+ * Get a single session by ID with authorization check
+ * @param db - Database instance
+ * @param sessionId - Session ID
+ * @param userId - User ID (for ownership validation)
+ * @returns Session object or null if not found/unauthorized
+ */
+export async function getSession(
+  db: any,
+  sessionId: number,
+  userId: string
+): Promise<{
+  id: number;
+  userId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+} | null> {
+  const session = await db
+    .select()
+    .from(db.sessions)
+    .where(
+      and(
+        eq(db.sessions.id, sessionId),
+        eq(db.sessions.userId, userId)
+      )
+    )
+    .get();
+
+  return session || null;
+}
+
+/**
+ * Rename a session
+ * @param db - Database instance
+ * @param sessionId - Session ID
+ * @param userId - User ID (for ownership validation)
+ * @param newTitle - New session title
+ * @returns Updated session object
+ */
+export async function renameSession(
+  db: any,
+  sessionId: number,
+  userId: string,
+  newTitle: string
+): Promise<{
+  id: number;
+  userId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}> {
+  const result = await db
+    .update(db.sessions)
+    .set({
+      title: newTitle,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(
+      and(
+        eq(db.sessions.id, sessionId),
+        eq(db.sessions.userId, userId)
+      )
+    )
+    .returning()
+    .get();
+
+  return result;
+}
+
+/**
+ * Delete a session and all its messages (hard delete)
+ * @param db - Database instance
+ * @param sessionId - Session ID
+ * @param userId - User ID (for ownership validation)
+ * @returns Boolean indicating success
+ */
+export async function deleteSession(
+  db: any,
+  sessionId: number,
+  userId: string
+): Promise<boolean> {
+  // First verify ownership
+  const session = await getSession(db, sessionId, userId);
+  if (!session) {
+    return false;
+  }
+
+  // Delete all messages in this session first (cascade)
+  await db
+    .delete(db.chatMessages)
+    .where(eq(db.chatMessages.sessionId, sessionId))
+    .run();
+
+  // Delete the session
+  await db
+    .delete(db.sessions)
+    .where(eq(db.sessions.id, sessionId))
+    .run();
+
+  return true;
+}
+
+/**
+ * Generate a simple session title from user's first message
+ * Truncates to 50 characters
+ * @param message - First user message
+ * @returns Truncated title
+ */
+export function generateSessionTitle(message: string): string {
+  const truncated = message.length > 50 ? message.substring(0, 50) + '...' : message;
+  return truncated;
+}
