@@ -1,10 +1,15 @@
 /** AI action types corresponding to CRUD operations and report generation */
 export type ActionType = 'create' | 'update' | 'read' | 'delete' | 'report' | 'plain_text';
 
+/** Payload for plain text responses (non-financial queries) */
+export interface PlainTextPayload {
+  // Empty - no structured data needed for plain text
+}
+
 /** Parsed action from AI model with confidence score */
 export interface TransactionAction {
   type: ActionType;
-  payload: CreatePayload | UpdatePayload | ReadPayload | DeletePayload | ReportPayload;
+  payload: CreatePayload | UpdatePayload | ReadPayload | DeletePayload | ReportPayload | PlainTextPayload;
   /** Confidence score 0.0-1.0 (higher = more confident) */
   confidence: number;
 }

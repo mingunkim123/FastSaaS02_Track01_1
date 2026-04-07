@@ -7,24 +7,15 @@ import type { TransactionAction, CreatePayload, UpdatePayload, ReadPayload, Dele
  * required action type, payload, and confidence score
  */
 export const AIResponseSchema = z.object({
-  type: z.enum(['create', 'update', 'read', 'delete', 'report']),
+  type: z.enum(['create', 'update', 'read', 'delete', 'report', 'plain_text']),
   payload: z.record(z.string(), z.any()),
   confidence: z.number().min(0).max(1),
 });
 
 /**
- * Schema for create transaction payload validation
- * Constraints:
- * - Amount: positive number up to ₩1,000,000,000
- * - Category: 1-50 characters, required
- * - Memo: up to 500 characters, optional, trimmed
- * - Date: YYYY-MM-DD format
+ * Schema for single create item
  */
-const CreatePayloadSchema = z.preprocess((data: any) => ({
-  ...data,
-  // type 또는 transactionType 둘 다 허용 (프론트 버전 호환)
-  transactionType: data.transactionType ?? data.type,
-}), z.object({
+const CreateItemSchema = z.object({
   transactionType: z.enum(['income', 'expense'], { message: 'Transaction type must be either "income" or "expense"' }),
   amount: z.number({ message: 'Amount must be a number' })
     .positive({ message: 'Amount must be greater than 0' })
@@ -40,14 +31,54 @@ const CreatePayloadSchema = z.preprocess((data: any) => ({
     .optional(),
   date: z.string({ message: 'Date must be a string' })
     .regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'Expected YYYY-MM-DD format' }),
-}));
+});
 
 /**
- * Schema for update transaction payload validation
- * All fields except ID are optional to allow partial updates
- * Constraints match CreatePayloadSchema for consistency
+ * Schema for create transaction payload validation
+ * Supports both single transaction and multiple items array
+ * Constraints:
+ * - Amount: positive number up to ₩1,000,000,000
+ * - Category: 1-50 characters, required
+ * - Memo: up to 500 characters, optional, trimmed
+ * - Date: YYYY-MM-DD format
  */
-const UpdatePayloadSchema = z.object({
+const CreatePayloadSchema = z.preprocess((data: any) => ({
+  ...data,
+  // type 또는 transactionType 둘 다 허용 (프론트 버전 호환)
+  transactionType: data.transactionType ?? data.type,
+}), z.object({
+  transactionType: z.enum(['income', 'expense'], { message: 'Transaction type must be either "income" or "expense"' }).optional(),
+  amount: z.number({ message: 'Amount must be a number' })
+    .positive({ message: 'Amount must be greater than 0' })
+    .max(1000000000, { message: 'Amount exceeds maximum (₩1,000,000,000)' })
+    .optional(),
+  category: z.string({ message: 'Category must be a string' })
+    .trim()
+    .min(1, { message: 'Category cannot be empty' })
+    .max(50, { message: 'Category cannot exceed 50 characters' })
+    .optional(),
+  memo: z.string()
+    .trim()
+    .max(500, { message: 'Memo cannot exceed 500 characters' })
+    .refine(val => val === '' || val.length > 0, { message: 'Memo cannot contain only whitespace' })
+    .optional(),
+  date: z.string({ message: 'Date must be a string' })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'Expected YYYY-MM-DD format' })
+    .optional(),
+  items: z.array(CreateItemSchema).optional(),
+}).refine(
+  (data) => {
+    const hasSingleFields = data.transactionType || data.amount || data.category || data.date;
+    const hasItems = data.items && data.items.length > 0;
+    return hasSingleFields || hasItems;
+  },
+  { message: 'Either single transaction fields (transactionType, amount, category, date) or items array required' }
+));
+
+/**
+ * Schema for single update item
+ */
+const UpdateItemSchema = z.object({
   id: z.number({ message: 'ID must be a number' })
     .positive({ message: 'ID must be a positive number' }),
   transactionType: z.enum(['income', 'expense'], { message: 'Transaction type must be either "income" or "expense"' }).optional(),
@@ -71,6 +102,44 @@ const UpdatePayloadSchema = z.object({
 });
 
 /**
+ * Schema for update transaction payload validation
+ * Supports both single transaction update and multiple updates array
+ * All fields except ID are optional to allow partial updates
+ * Constraints match CreatePayloadSchema for consistency
+ */
+const UpdatePayloadSchema = z.object({
+  id: z.number({ message: 'ID must be a number' })
+    .positive({ message: 'ID must be a positive number' })
+    .optional(),
+  transactionType: z.enum(['income', 'expense'], { message: 'Transaction type must be either "income" or "expense"' }).optional(),
+  amount: z.number({ message: 'Amount must be a number' })
+    .positive({ message: 'Amount must be greater than 0' })
+    .max(1000000000, { message: 'Amount exceeds maximum (₩1,000,000,000)' })
+    .optional(),
+  category: z.string({ message: 'Category must be a string' })
+    .trim()
+    .min(1, { message: 'Category cannot be empty' })
+    .max(50, { message: 'Category cannot exceed 50 characters' })
+    .optional(),
+  memo: z.string()
+    .trim()
+    .max(500, { message: 'Memo cannot exceed 500 characters' })
+    .refine(val => val === '' || val.length > 0, { message: 'Memo cannot contain only whitespace' })
+    .optional(),
+  date: z.string({ message: 'Date must be a string' })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'Expected YYYY-MM-DD format' })
+    .optional(),
+  updates: z.array(UpdateItemSchema).optional(),
+}).refine(
+  (data) => {
+    const hasSingleUpdate = data.id !== undefined;
+    const hasMultipleUpdates = data.updates && data.updates.length > 0;
+    return hasSingleUpdate || hasMultipleUpdates;
+  },
+  { message: 'Either id (with optional fields for single update) or updates array required' }
+);
+
+/**
  * Schema for read (query) payload validation
  * All fields optional for flexible transaction filtering
  */
@@ -84,13 +153,21 @@ const ReadPayloadSchema = z.object({
 
 /**
  * Schema for delete payload validation
- * ID is required; reason is optional for audit purposes
+ * Supports both single transaction delete and multiple deletes array
+ * Either id (single) or items (multiple) is required
  */
 const DeletePayloadSchema = z.object({
   id: z.number({ message: 'ID must be a number' })
-    .positive({ message: 'ID must be a positive number' }),
+    .positive({ message: 'ID must be a positive number' })
+    .optional(),
+  items: z.array(z.number({ message: 'Each ID must be a number' })
+    .positive({ message: 'Each ID must be a positive number' }))
+    .optional(),
   reason: z.string({ message: 'Reason must be a string' }).optional(),
-});
+}).refine(
+  (data) => data.id !== undefined || (data.items !== undefined && data.items.length > 0),
+  { message: 'Either id (single) or items (array of IDs) must be provided' }
+);
 
 /**
  * Schema for report payload validation
