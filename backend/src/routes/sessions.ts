@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { getDb, Env } from '../db/index';
 import type { Variables } from '../middleware/auth';
-import { chatMessages, transactions } from '../db/schema';
+import { chatMessages, transactions, reports } from '../db/schema';
 import { eq, desc, isNull, and, inArray, sql } from 'drizzle-orm';
 import { AIService } from '../services/ai';
 import { getLLMConfig, callLLM } from '../services/llm';
@@ -759,12 +759,23 @@ How can I help with your finances?`;
           // Generate report
           const report = await reportService.generateReport(db, userId, reportPayload);
 
+          // Save report to database
+          const savedReport = await db.insert(reports).values({
+            userId,
+            reportType: report.reportType,
+            title: report.title,
+            subtitle: report.subtitle,
+            reportData: JSON.stringify(report.sections),
+            params: JSON.stringify(reportPayload.params || {}),
+          }).returning().get();
+
           // Format as chat message
           const { content: reportContent, metadata: reportMetadata } = messages.generateReportMessage(report);
           const responseMetadata = {
             ...reportMetadata,
             report: {
               ...report,
+              id: savedReport.id, // Include report ID for navigation
               params: reportPayload.params || {},
             },
           };

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { ZodError } from 'zod';
 import { getDb, Env } from '../db/index';
-import { transactions, chatMessages } from '../db/schema';
+import { transactions, chatMessages, reports } from '../db/schema';
 import type { Variables } from '../middleware/auth';
 import type { Transaction } from '../db/schema';
 import { AIService } from '../services/ai';
@@ -454,12 +454,23 @@ router.post('/action', async (c) => {
         // Generate report
         const report = await reportService.generateReport(db, userId, reportPayload);
 
+        // Save report to database
+        const savedReport = await db.insert(reports).values({
+          userId,
+          reportType: report.reportType,
+          title: report.title,
+          subtitle: report.subtitle,
+          reportData: JSON.stringify(report.sections),
+          params: JSON.stringify(reportPayload.params || {}),
+        }).returning().get();
+
         // Format as chat message
         const { content, metadata } = messages.generateReportMessage(report);
         const responseMetadata = {
           ...metadata,
           report: {
             ...report,
+            id: savedReport.id, // Include report ID for navigation
             params: reportPayload.params || {},
           },
         };
