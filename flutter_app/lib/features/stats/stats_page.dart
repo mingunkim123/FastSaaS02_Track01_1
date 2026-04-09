@@ -69,15 +69,22 @@ class _StatsPageState extends ConsumerState<StatsPage> {
           title: const Text('통계'),
           elevation: 0,
           bottom: const TabBar(
+            labelStyle: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+            unselectedLabelStyle: TextStyle(
+              color: Colors.white70,
+            ),
             tabs: [
-              Tab(text: '생성'),
-              Tab(text: '저장됨'),
+              Tab(text: '통계'),
+              Tab(text: '리포트'),
             ],
           ),
         ),
         body: TabBarView(
           children: [
-            // 생성 tab - existing stats content
+            // 통계 tab - existing stats content
             summaryAsync.when(
               data: (summary) => _buildContent(context, summary, ref, monthString),
               loading: () => const Center(
@@ -100,7 +107,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                 ),
               ),
             ),
-            // 저장됨 tab - saved reports
+            // 리포트 tab - saved reports
             const SavedReportsTab(),
           ],
         ),
