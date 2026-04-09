@@ -27,8 +27,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
-      // Check authentication state
-      final isAuthenticated = ref.read(isAuthenticatedProvider);
+      // Check authentication state using the stream data
+      final isAuthenticated = authState.whenData((authState) => authState.session != null).value ?? false;
 
       // If not authenticated and not already on login page, redirect to login
       if (!isAuthenticated && state.matchedLocation != '/login') {
@@ -60,7 +60,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '/report/:id',
         builder: (context, state) {
           final id = int.parse(state.pathParameters['id'] ?? '0');
-          final isFromStats = state.extra as bool? ?? false;
+          final extras = state.extra as Map<String, dynamic>?;
+          final isFromStats = extras?['isFromStats'] as bool? ?? false;
           return ReportDetailPage(
             reportId: id,
             isFromStats: isFromStats,
