@@ -53,16 +53,20 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('리포트가 저장되었습니다')),
         );
-        Navigator.of(context).pop();
+        // Use post-frame callback to pop after build completes
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+        });
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('저장 실패: $e')),
         );
+        setState(() => _isSaving = false);
       }
-    } finally {
-      setState(() => _isSaving = false);
     }
   }
 
@@ -96,16 +100,20 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('리포트가 삭제되었습니다')),
         );
-        Navigator.of(context).pop();
+        // Use post-frame callback to pop after build completes
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+        });
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('삭제 실패: $e')),
         );
+        setState(() => _isDeleting = false);
       }
-    } finally {
-      setState(() => _isDeleting = false);
     }
   }
 
