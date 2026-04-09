@@ -85,7 +85,7 @@ export class ReportService {
         eq(reports.userId, userId)
       ));
 
-    return result.changes > 0;
+    return result.rowsAffected > 0;
   }
 }
 
