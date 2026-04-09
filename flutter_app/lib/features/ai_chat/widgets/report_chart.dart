@@ -13,10 +13,20 @@ class ReportChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final chartType = section['type'] as String? ?? 'bar';
     final title = section['title'] as String?;
-    final data = section['data'] as List<dynamic>?;
+    final subtitle = section['subtitle'] as String?;
+    final rawData = section['data'] as Map<String, dynamic>?;
 
-    // Handle missing or invalid data
-    if (data == null || data.isEmpty) {
+    if (rawData == null) {
+      return const SizedBox.shrink();
+    }
+
+    // Parse labels and values from the API response format
+    final labels = (rawData['labels'] as List<dynamic>?)?.cast<String>() ?? [];
+    final values = (rawData['values'] as List<dynamic>?)
+        ?.map((v) => (v as num).toDouble())
+        .toList() ?? [];
+
+    if (values.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -25,7 +35,7 @@ class ReportChart extends StatelessWidget {
       children: [
         if (title != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: 4),
             child: Text(
               title,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -33,27 +43,37 @@ class ReportChart extends StatelessWidget {
                   ),
             ),
           ),
+        if (subtitle != null && subtitle.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              subtitle,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.grey[600],
+                  ),
+            ),
+          ),
         Container(
-          height: 200,
+          height: 250,
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey[300]!),
             borderRadius: BorderRadius.circular(8),
           ),
-          padding: const EdgeInsets.all(12),
-          child: _buildChart(chartType, data),
+          padding: const EdgeInsets.all(16),
+          child: _buildChart(chartType, labels, values),
         ),
       ],
     );
   }
 
-  Widget _buildChart(String chartType, List<dynamic> data) {
+  Widget _buildChart(String chartType, List<String> labels, List<double> values) {
     switch (chartType) {
       case 'pie':
-        return _buildPieChart(data);
+        return _buildPieChart(labels, values);
       case 'bar':
-        return _buildBarChart(data);
+        return _buildBarChart(labels, values);
       case 'line':
-        return _buildLineChart(data);
+        return _buildLineChart(labels, values);
       default:
         return Center(
           child: Text('Unknown chart type: $chartType'),
@@ -61,56 +81,87 @@ class ReportChart extends StatelessWidget {
     }
   }
 
-  Widget _buildPieChart(List<dynamic> data) {
+  Widget _buildPieChart(List<String> labels, List<double> values) {
     final sections = <PieChartSectionData>[];
     final colors = [
       Colors.blue,
       Colors.red,
       Colors.green,
-      Colors.yellow,
+      Colors.orange,
       Colors.purple,
+      Colors.teal,
+      Colors.pink,
+      Colors.amber,
     ];
 
-    double total = 0;
-    for (var item in data) {
-      final value = _getChartValue(item);
-      total += value;
-    }
+    double total = values.fold(0, (sum, val) => sum + val);
 
-    for (var i = 0; i < data.length; i++) {
-      final item = data[i];
-      final value = _getChartValue(item);
+    for (var i = 0; i < values.length; i++) {
+      final value = values[i];
       final percentage = total > 0 ? (value / total) * 100 : 0;
 
       sections.add(
         PieChartSectionData(
           value: value,
           color: colors[i % colors.length],
-          title: '${percentage.toStringAsFixed(1)}%',
+          title: '${percentage.toStringAsFixed(0)}%',
           titleStyle: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
             fontSize: 12,
           ),
+          radius: 50,
         ),
       );
     }
 
-    return PieChart(
-      PieChartData(sections: sections),
+    return Column(
+      children: [
+        Expanded(
+          child: PieChart(
+            PieChartData(sections: sections),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Legend
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          children: List.generate(values.length, (i) {
+            final label = i < labels.length ? labels[i] : 'Item $i';
+            final value = values[i];
+            final color = colors[i % colors.length];
+            final percentage = total > 0 ? (value / total) * 100 : 0;
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '$label ${percentage.toStringAsFixed(0)}%',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            );
+          }),
+        ),
+      ],
     );
   }
 
-  Widget _buildBarChart(List<dynamic> data) {
+  Widget _buildBarChart(List<String> labels, List<double> values) {
     final barGroups = <BarChartGroupData>[];
-    final maxValue = data
-        .map((item) => _getChartValue(item))
-        .reduce((a, b) => a > b ? a : b);
+    final maxValue = values.reduce((a, b) => a > b ? a : b);
 
-    for (var i = 0; i < data.length && i < 8; i++) {
-      final item = data[i];
-      final value = _getChartValue(item);
-
+    for (var i = 0; i < values.length && i < 12; i++) {
+      final value = values[i];
       barGroups.add(
         BarChartGroupData(
           x: i,
@@ -118,6 +169,10 @@ class ReportChart extends StatelessWidget {
             BarChartRodData(
               toY: value,
               color: Colors.blue,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(4),
+                topRight: Radius.circular(4),
+              ),
             ),
           ],
         ),
@@ -129,50 +184,107 @@ class ReportChart extends StatelessWidget {
         barGroups: barGroups,
         maxY: maxValue > 0 ? maxValue * 1.1 : 100,
         borderData: FlBorderData(show: false),
-        gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(show: false),
+        gridData: const FlGridData(show: true, drawHorizontalLine: true),
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: labels.isNotEmpty,
+              getTitlesWidget: (double value, TitleMeta meta) {
+                int index = value.toInt();
+                if (index < labels.length) {
+                  return Text(
+                    labels[index],
+                    style: const TextStyle(fontSize: 10),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  );
+                }
+                return const Text('');
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (double value, TitleMeta meta) {
+                return Text(
+                  _formatNumber(value.toInt()),
+                  style: const TextStyle(fontSize: 10),
+                );
+              },
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildLineChart(List<dynamic> data) {
+  Widget _buildLineChart(List<String> labels, List<double> values) {
     final spots = <FlSpot>[];
-    final maxValue = data
-        .map((item) => _getChartValue(item))
-        .reduce((a, b) => a > b ? a : b);
+    final maxValue = values.reduce((a, b) => a > b ? a : b);
 
-    for (var i = 0; i < data.length; i++) {
-      final item = data[i];
-      final value = _getChartValue(item);
-      spots.add(FlSpot(i.toDouble(), value));
+    for (var i = 0; i < values.length; i++) {
+      spots.add(FlSpot(i.toDouble(), values[i]));
     }
 
     return LineChart(
       LineChartData(
         maxY: maxValue > 0 ? maxValue * 1.1 : 100,
         borderData: FlBorderData(show: false),
-        gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(show: false),
+        gridData: const FlGridData(show: true, drawHorizontalLine: true),
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: labels.isNotEmpty,
+              getTitlesWidget: (double value, TitleMeta meta) {
+                int index = value.toInt();
+                if (index < labels.length) {
+                  return Text(
+                    labels[index],
+                    style: const TextStyle(fontSize: 10),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  );
+                }
+                return const Text('');
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (double value, TitleMeta meta) {
+                return Text(
+                  _formatNumber(value.toInt()),
+                  style: const TextStyle(fontSize: 10),
+                );
+              },
+            ),
+          ),
+        ),
         lineBarsData: [
           LineChartBarData(
             spots: spots,
             isCurved: true,
             color: Colors.blue,
-            dotData: const FlDotData(show: false),
+            barWidth: 2,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, barData, index) =>
+                  FlDotCirclePainter(radius: 3, color: Colors.blue),
+            ),
           ),
         ],
       ),
     );
   }
 
-  /// Extract numeric value from chart data item
-  /// Handles both direct numbers and objects with 'value' field
-  double _getChartValue(dynamic item) {
-    if (item is num) return item.toDouble();
-    if (item is Map<String, dynamic>) {
-      final value = item['value'];
-      if (value is num) return value.toDouble();
+  String _formatNumber(int num) {
+    if (num >= 1000000) {
+      return '${(num / 1000000).toStringAsFixed(0)}M';
+    } else if (num >= 1000) {
+      return '${(num / 1000).toStringAsFixed(0)}K';
     }
-    return 0.0;
+    return num.toString();
   }
 }

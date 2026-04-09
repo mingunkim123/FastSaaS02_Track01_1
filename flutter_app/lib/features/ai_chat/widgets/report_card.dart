@@ -12,36 +12,108 @@ class ReportCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final sectionType = section['type'] as String? ?? 'card';
     final title = section['title'] as String?;
-    final content = section['content'] as String?;
-
-    Color backgroundColor;
-    Color borderColor;
-    IconData? icon;
+    final subtitle = section['subtitle'] as String?;
+    final metric = section['metric'] as String?;
+    final trend = section['trend'] as String?;
+    final dataMap = section['data'] as Map<String, dynamic>?;
+    final message = dataMap?['message'] as String?;
 
     switch (sectionType) {
-      case 'alert':
-        backgroundColor = Colors.orange[50]!;
-        borderColor = Colors.orange[300]!;
-        icon = Icons.warning_rounded;
-        break;
-      case 'suggestion':
-        backgroundColor = Colors.blue[50]!;
-        borderColor = Colors.blue[300]!;
-        icon = Icons.lightbulb_rounded;
-        break;
       case 'card':
+        return _buildCardSection(context, title, subtitle, metric, trend);
+      case 'alert':
+        return _buildAlertSection(context, title, message);
+      case 'suggestion':
+        return _buildSuggestionSection(context, title, message);
       default:
-        backgroundColor = Colors.grey[100]!;
-        borderColor = Colors.grey[300]!;
-        icon = null;
-        break;
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildCardSection(BuildContext context, String? title, String? subtitle, String? metric, String? trend) {
+    // Determine trend icon and color
+    IconData? trendIcon;
+    Color trendColor = Colors.grey;
+    if (trend != null) {
+      switch (trend.toLowerCase()) {
+        case 'up':
+          trendIcon = Icons.trending_up;
+          trendColor = Colors.green;
+          break;
+        case 'down':
+          trendIcon = Icons.trending_down;
+          trendColor = Colors.red;
+          break;
+        case 'stable':
+          trendIcon = Icons.trending_flat;
+          trendColor = Colors.orange;
+          break;
+      }
     }
 
     return Container(
       decoration: BoxDecoration(
-        color: backgroundColor,
+        color: Colors.grey[50],
         border: Border(
-          left: BorderSide(color: borderColor, width: 4),
+          left: BorderSide(color: Colors.grey[300]!, width: 4),
+        ),
+        borderRadius: const BorderRadius.only(
+          topRight: Radius.circular(8),
+          bottomRight: Radius.circular(8),
+        ),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title row with trend icon
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title ?? 'Metric',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
+                      ),
+                ),
+              ),
+              if (trendIcon != null) ...[
+                const SizedBox(width: 8),
+                Icon(trendIcon, size: 20, color: trendColor),
+              ],
+            ],
+          ),
+          // Subtitle if present
+          if (subtitle != null && subtitle.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.grey[600],
+                  ),
+            ),
+          ],
+          // Large metric value
+          const SizedBox(height: 12),
+          Text(
+            metric ?? '—',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAlertSection(BuildContext context, String? title, String? message) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        border: Border(
+          left: BorderSide(color: Colors.orange[300]!, width: 4),
         ),
         borderRadius: const BorderRadius.only(
           topRight: Radius.circular(8),
@@ -49,32 +121,82 @@ class ReportCard extends StatelessWidget {
         ),
       ),
       padding: const EdgeInsets.all(12),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (title != null)
-            Row(
+          Icon(Icons.warning_rounded, size: 20, color: Colors.orange[700]),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 18, color: borderColor),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Text(
+                if (title != null)
+                  Text(
                     title,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w600,
+                          color: Colors.orange[900],
                         ),
                   ),
-                ),
+                if (message != null) ...[
+                  if (title != null) const SizedBox(height: 4),
+                  Text(
+                    message,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.orange[800],
+                        ),
+                  ),
+                ],
               ],
             ),
-          if (title != null && content != null) const SizedBox(height: 8),
-          if (content != null)
-            Text(
-              content,
-              style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSuggestionSection(BuildContext context, String? title, String? message) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        border: Border(
+          left: BorderSide(color: Colors.blue[300]!, width: 4),
+        ),
+        borderRadius: const BorderRadius.only(
+          topRight: Radius.circular(8),
+          bottomRight: Radius.circular(8),
+        ),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.lightbulb_rounded, size: 20, color: Colors.blue[700]),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (title != null)
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue[900],
+                        ),
+                  ),
+                if (message != null) ...[
+                  if (title != null) const SizedBox(height: 4),
+                  Text(
+                    message,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.blue[800],
+                        ),
+                  ),
+                ],
+              ],
             ),
+          ),
         ],
       ),
     );

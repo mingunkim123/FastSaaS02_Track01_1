@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/report.dart';
 import '../../shared/providers/report_provider.dart';
 import '../ai_chat/widgets/report_card.dart';
+import '../ai_chat/widgets/report_chart.dart';
 
 class ReportDetailPage extends ConsumerStatefulWidget {
   final int reportId;
@@ -21,6 +22,18 @@ class ReportDetailPage extends ConsumerStatefulWidget {
 class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
   bool _isSaving = false;
   bool _isDeleting = false;
+
+  Widget _buildSection(Map<String, dynamic> section) {
+    final type = section['type'] as String? ?? 'card';
+    switch (type) {
+      case 'pie':
+      case 'bar':
+      case 'line':
+        return ReportChart(section: section);
+      default:
+        return ReportCard(section: section);
+    }
+  }
 
   void _handleSaveReport(ReportDetail report) async {
     setState(() => _isSaving = true);
@@ -150,7 +163,7 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
                     final section = report.reportData[index];
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: ReportCard(section: section),
+                      child: _buildSection(section),
                     );
                   },
                   childCount: report.reportData.length,
