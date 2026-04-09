@@ -254,6 +254,17 @@ export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: Varia
     if (!authHeader?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401);
     const token = authHeader.slice(7);
 
+    // DEV 환경에서 테스트용 admin 계정 우회
+    const isDev = c.env.ENVIRONMENT === 'development' || !c.env.ENVIRONMENT;
+    const testAdminToken = 'e2e-test-admin-token';
+
+    if (isDev && token === testAdminToken) {
+      console.log('[AUTH] Dev mode: E2E test admin account authenticated');
+      c.set('userId', 'e2e-test-admin');
+      await next();
+      return;
+    }
+
     // Supabase 인스턴스의 공개키 정보를 가져오는 URL
     // ES256 검증을 위해 필요함
     const supabaseUrl = 'https://uqvnepemplsdkkawbmdc.supabase.co';
