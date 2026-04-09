@@ -4,6 +4,7 @@ import '../../shared/models/report.dart';
 import '../../shared/providers/report_provider.dart';
 import '../ai_chat/widgets/report_card.dart';
 import '../ai_chat/widgets/report_chart.dart';
+import 'widgets/report_name_dialog.dart';
 
 class ReportDetailPage extends ConsumerStatefulWidget {
   final int reportId;
@@ -35,13 +36,13 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
     }
   }
 
-  void _handleSaveReport(ReportDetail report) async {
+  void _handleSaveReport(ReportDetail report, {String? customTitle}) async {
     setState(() => _isSaving = true);
 
     try {
       final reportData = Report(
         reportType: report.reportType,
-        title: report.title,
+        title: customTitle ?? report.title,
         subtitle: report.subtitle,
         reportData: report.reportData,
         params: report.params,
@@ -68,6 +69,18 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
         setState(() => _isSaving = false);
       }
     }
+  }
+
+  void _showSaveDialog(ReportDetail report) {
+    showDialog(
+      context: context,
+      builder: (context) => ReportNameDialog(
+        initialName: report.title,
+        onSave: (String newTitle) {
+          _handleSaveReport(report, customTitle: newTitle);
+        },
+      ),
+    );
   }
 
   void _handleDeleteReport() async {
@@ -148,9 +161,41 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      report.title,
-                      style: Theme.of(context).textTheme.headlineSmall,
+                    GestureDetector(
+                      onTap: widget.isFromStats
+                          ? () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => ReportNameDialog(
+                                  initialName: report.title,
+                                  title: '리포트 이름 변경',
+                                  onSave: (newTitle) async {
+                                    try {
+                                      await ref.read(updateReportProvider((widget.reportId, newTitle)).future);
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('리포트 이름이 변경되었습니다')),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('변경 실패: $e')),
+                                        );
+                                      }
+                                    }
+                                  },
+                                ),
+                              );
+                            }
+                          : null,
+                      child: Text(
+                        report.title,
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          decoration: widget.isFromStats ? TextDecoration.underline : null,
+                          decorationColor: widget.isFromStats ? Colors.grey : null,
+                        ),
+                      ),
                     ),
                     if (report.subtitle != null && report.subtitle!.isNotEmpty)
                       Padding(
@@ -210,7 +255,7 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
                     ],
                   )
                 : ElevatedButton(
-                    onPressed: _isSaving ? null : () => _handleSaveReport(report),
+                    onPressed: _isSaving ? null : () => _showSaveDialog(report),
                     child: _isSaving
                         ? const SizedBox(
                             height: 20,

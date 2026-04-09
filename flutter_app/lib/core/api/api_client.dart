@@ -301,6 +301,26 @@ class ApiClient {
     }
   }
 
+  /// Update a report title
+  /// PATCH /api/reports/:id
+  Future<void> updateReport(int reportId, String newTitle) async {
+    try {
+      final response = await _dio.patch(
+        '/reports/$reportId',
+        data: {'title': newTitle},
+      );
+
+      if (response.statusCode != 200) {
+        throw DioException(
+          requestOptions: response.requestOptions,
+          response: response,
+        );
+      }
+    } on DioException {
+      rethrow;
+    }
+  }
+
   /// Get all sessions for the current user
   /// GET /api/sessions
   Future<Map<String, dynamic>> getSessions() async {

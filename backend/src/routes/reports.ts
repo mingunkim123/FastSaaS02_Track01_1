@@ -3,7 +3,7 @@ import { ZodError } from 'zod';
 import { z } from 'zod';
 import { getDb, Env } from '../db/index';
 import type { Variables } from '../middleware/auth';
-import { ReportService } from '../services/reports';
+import { ReportService, updateReportTitle } from '../services/reports';
 
 const router = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -160,6 +160,27 @@ router.delete('/:id', async (c) => {
       { success: false, error: 'Failed to delete report' },
       500
     );
+  }
+});
+
+// PATCH /api/reports/:id - Update report title
+router.patch('/:id', async (c) => {
+  const userId = c.get('userId');
+  const reportId = parseInt(c.req.param('id'));
+  const body = await c.req.json();
+  const { title } = body;
+
+  if (!title || typeof title !== 'string') {
+    return c.json({ error: 'Title is required and must be a string' }, 400);
+  }
+
+  try {
+    const db = getDb(c.env);
+    const updated = await updateReportTitle(db, userId, reportId, title);
+    return c.json({ success: true, report: updated });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ error: message }, 400);
   }
 });
 

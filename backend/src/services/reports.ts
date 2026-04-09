@@ -88,3 +88,32 @@ export class ReportService {
     return result.changes > 0;
   }
 }
+
+export async function updateReportTitle(
+  db: any,
+  userId: string,
+  reportId: number,
+  newTitle: string,
+): Promise<Report> {
+  // Validate title
+  const trimmedTitle = newTitle.trim();
+  if (!trimmedTitle || trimmedTitle.length === 0) {
+    throw new Error('Report title cannot be empty');
+  }
+  if (trimmedTitle.length > 100) {
+    throw new Error('Report title must be 100 characters or less');
+  }
+
+  // Update report (userId filter ensures data isolation)
+  const updated = await db
+    .update(reports)
+    .set({ title: trimmedTitle, updatedAt: new Date() })
+    .where(and(eq(reports.id, reportId), eq(reports.userId, userId)))
+    .returning();
+
+  if (updated.length === 0) {
+    throw new Error('Report not found or permission denied');
+  }
+
+  return updated[0];
+}

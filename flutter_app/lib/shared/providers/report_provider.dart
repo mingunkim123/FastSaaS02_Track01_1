@@ -42,3 +42,18 @@ final deleteReportProvider = FutureProvider.family<void, int>(
     return apiClient.deleteReport(reportId);
   },
 );
+
+// Update report title
+final updateReportProvider = FutureProvider.family<void, (int, String)>(
+  (ref, args) async {
+    final (reportId, newTitle) = args;
+    final apiClient = ref.watch(apiClientProvider);
+
+    await apiClient.updateReport(reportId, newTitle);
+
+    // Invalidate report detail cache so UI refreshes
+    ref.invalidate(getReportDetailProvider(reportId));
+    // Invalidate report list cache
+    ref.invalidate(getReportsProvider((month: null, limit: 50)));
+  },
+);
