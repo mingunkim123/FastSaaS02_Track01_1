@@ -147,18 +147,11 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
               SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
-                    final entries = report.reportData.entries.toList();
-                    final entry = entries[index];
-                    final value = entry.value;
-
-                    if (value is Map<String, dynamic>) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: ReportCard(section: value),
-                      );
-                    }
-
-                    return Container();
+                    final section = report.reportData[index];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: ReportCard(section: section),
+                    );
                   },
                   childCount: report.reportData.length,
                 ),

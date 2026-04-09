@@ -12,7 +12,7 @@ const SaveReportSchema = z.object({
   reportType: z.enum(['monthly_summary', 'category_detail', 'spending_pattern', 'anomaly', 'suggestion']),
   title: z.string().min(1).max(200),
   subtitle: z.string().max(100).optional(),
-  reportData: z.record(z.string(), z.unknown()),
+  reportData: z.array(z.record(z.string(), z.unknown())),
   params: z.record(z.string(), z.unknown()),
 });
 

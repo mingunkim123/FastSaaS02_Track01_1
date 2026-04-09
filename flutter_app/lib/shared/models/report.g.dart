@@ -30,7 +30,9 @@ _$ReportDetailImpl _$$ReportDetailImplFromJson(Map<String, dynamic> json) =>
       reportType: json['reportType'] as String,
       title: json['title'] as String,
       subtitle: json['subtitle'] as String?,
-      reportData: json['reportData'] as Map<String, dynamic>,
+      reportData: (json['reportData'] as List<dynamic>)
+          .map((e) => e as Map<String, dynamic>)
+          .toList(),
       params: json['params'] as Map<String, dynamic>,
       createdAt: json['createdAt'] as String,
     );
@@ -50,7 +52,9 @@ _$ReportImpl _$$ReportImplFromJson(Map<String, dynamic> json) => _$ReportImpl(
   reportType: json['reportType'] as String,
   title: json['title'] as String,
   subtitle: json['subtitle'] as String?,
-  reportData: json['reportData'] as Map<String, dynamic>,
+  reportData: (json['reportData'] as List<dynamic>)
+      .map((e) => e as Map<String, dynamic>)
+      .toList(),
   params: json['params'] as Map<String, dynamic>,
 );
 

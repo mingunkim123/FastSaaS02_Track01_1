@@ -272,7 +272,8 @@ mixin _$ReportDetail {
   String get reportType => throw _privateConstructorUsedError;
   String get title => throw _privateConstructorUsedError;
   String? get subtitle => throw _privateConstructorUsedError;
-  Map<String, dynamic> get reportData => throw _privateConstructorUsedError;
+  List<Map<String, dynamic>> get reportData =>
+      throw _privateConstructorUsedError;
   Map<String, dynamic> get params => throw _privateConstructorUsedError;
   String get createdAt => throw _privateConstructorUsedError;
 
@@ -298,7 +299,7 @@ abstract class $ReportDetailCopyWith<$Res> {
     String reportType,
     String title,
     String? subtitle,
-    Map<String, dynamic> reportData,
+    List<Map<String, dynamic>> reportData,
     Map<String, dynamic> params,
     String createdAt,
   });
@@ -348,7 +349,7 @@ class _$ReportDetailCopyWithImpl<$Res, $Val extends ReportDetail>
             reportData: null == reportData
                 ? _value.reportData
                 : reportData // ignore: cast_nullable_to_non_nullable
-                      as Map<String, dynamic>,
+                      as List<Map<String, dynamic>>,
             params: null == params
                 ? _value.params
                 : params // ignore: cast_nullable_to_non_nullable
@@ -377,7 +378,7 @@ abstract class _$$ReportDetailImplCopyWith<$Res>
     String reportType,
     String title,
     String? subtitle,
-    Map<String, dynamic> reportData,
+    List<Map<String, dynamic>> reportData,
     Map<String, dynamic> params,
     String createdAt,
   });
@@ -426,7 +427,7 @@ class __$$ReportDetailImplCopyWithImpl<$Res>
         reportData: null == reportData
             ? _value._reportData
             : reportData // ignore: cast_nullable_to_non_nullable
-                  as Map<String, dynamic>,
+                  as List<Map<String, dynamic>>,
         params: null == params
             ? _value._params
             : params // ignore: cast_nullable_to_non_nullable
@@ -448,7 +449,7 @@ class _$ReportDetailImpl implements _ReportDetail {
     required this.reportType,
     required this.title,
     this.subtitle,
-    required final Map<String, dynamic> reportData,
+    required final List<Map<String, dynamic>> reportData,
     required final Map<String, dynamic> params,
     required this.createdAt,
   }) : _reportData = reportData,
@@ -465,12 +466,12 @@ class _$ReportDetailImpl implements _ReportDetail {
   final String title;
   @override
   final String? subtitle;
-  final Map<String, dynamic> _reportData;
+  final List<Map<String, dynamic>> _reportData;
   @override
-  Map<String, dynamic> get reportData {
-    if (_reportData is EqualUnmodifiableMapView) return _reportData;
+  List<Map<String, dynamic>> get reportData {
+    if (_reportData is EqualUnmodifiableListView) return _reportData;
     // ignore: implicit_dynamic_type
-    return EqualUnmodifiableMapView(_reportData);
+    return EqualUnmodifiableListView(_reportData);
   }
 
   final Map<String, dynamic> _params;
@@ -542,7 +543,7 @@ abstract class _ReportDetail implements ReportDetail {
     required final String reportType,
     required final String title,
     final String? subtitle,
-    required final Map<String, dynamic> reportData,
+    required final List<Map<String, dynamic>> reportData,
     required final Map<String, dynamic> params,
     required final String createdAt,
   }) = _$ReportDetailImpl;
@@ -559,7 +560,7 @@ abstract class _ReportDetail implements ReportDetail {
   @override
   String? get subtitle;
   @override
-  Map<String, dynamic> get reportData;
+  List<Map<String, dynamic>> get reportData;
   @override
   Map<String, dynamic> get params;
   @override
@@ -582,7 +583,8 @@ mixin _$Report {
   String get reportType => throw _privateConstructorUsedError;
   String get title => throw _privateConstructorUsedError;
   String? get subtitle => throw _privateConstructorUsedError;
-  Map<String, dynamic> get reportData => throw _privateConstructorUsedError;
+  List<Map<String, dynamic>> get reportData =>
+      throw _privateConstructorUsedError;
   Map<String, dynamic> get params => throw _privateConstructorUsedError;
 
   /// Serializes this Report to a JSON map.
@@ -603,7 +605,7 @@ abstract class $ReportCopyWith<$Res> {
     String reportType,
     String title,
     String? subtitle,
-    Map<String, dynamic> reportData,
+    List<Map<String, dynamic>> reportData,
     Map<String, dynamic> params,
   });
 }
@@ -646,7 +648,7 @@ class _$ReportCopyWithImpl<$Res, $Val extends Report>
             reportData: null == reportData
                 ? _value.reportData
                 : reportData // ignore: cast_nullable_to_non_nullable
-                      as Map<String, dynamic>,
+                      as List<Map<String, dynamic>>,
             params: null == params
                 ? _value.params
                 : params // ignore: cast_nullable_to_non_nullable
@@ -669,7 +671,7 @@ abstract class _$$ReportImplCopyWith<$Res> implements $ReportCopyWith<$Res> {
     String reportType,
     String title,
     String? subtitle,
-    Map<String, dynamic> reportData,
+    List<Map<String, dynamic>> reportData,
     Map<String, dynamic> params,
   });
 }
@@ -711,7 +713,7 @@ class __$$ReportImplCopyWithImpl<$Res>
         reportData: null == reportData
             ? _value._reportData
             : reportData // ignore: cast_nullable_to_non_nullable
-                  as Map<String, dynamic>,
+                  as List<Map<String, dynamic>>,
         params: null == params
             ? _value._params
             : params // ignore: cast_nullable_to_non_nullable
@@ -728,7 +730,7 @@ class _$ReportImpl implements _Report {
     required this.reportType,
     required this.title,
     this.subtitle,
-    required final Map<String, dynamic> reportData,
+    required final List<Map<String, dynamic>> reportData,
     required final Map<String, dynamic> params,
   }) : _reportData = reportData,
        _params = params;
@@ -742,12 +744,12 @@ class _$ReportImpl implements _Report {
   final String title;
   @override
   final String? subtitle;
-  final Map<String, dynamic> _reportData;
+  final List<Map<String, dynamic>> _reportData;
   @override
-  Map<String, dynamic> get reportData {
-    if (_reportData is EqualUnmodifiableMapView) return _reportData;
+  List<Map<String, dynamic>> get reportData {
+    if (_reportData is EqualUnmodifiableListView) return _reportData;
     // ignore: implicit_dynamic_type
-    return EqualUnmodifiableMapView(_reportData);
+    return EqualUnmodifiableListView(_reportData);
   }
 
   final Map<String, dynamic> _params;
@@ -810,7 +812,7 @@ abstract class _Report implements Report {
     required final String reportType,
     required final String title,
     final String? subtitle,
-    required final Map<String, dynamic> reportData,
+    required final List<Map<String, dynamic>> reportData,
     required final Map<String, dynamic> params,
   }) = _$ReportImpl;
 
@@ -823,7 +825,7 @@ abstract class _Report implements Report {
   @override
   String? get subtitle;
   @override
-  Map<String, dynamic> get reportData;
+  List<Map<String, dynamic>> get reportData;
   @override
   Map<String, dynamic> get params;
 

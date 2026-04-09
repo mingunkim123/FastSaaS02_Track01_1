@@ -24,7 +24,7 @@ class ReportDetail with _$ReportDetail {
     required String reportType,
     required String title,
     String? subtitle,
-    required Map<String, dynamic> reportData,
+    required List<Map<String, dynamic>> reportData,
     required Map<String, dynamic> params,
     required String createdAt,
   }) = _ReportDetail;
@@ -39,7 +39,7 @@ class Report with _$Report {
     required String reportType,
     required String title,
     String? subtitle,
-    required Map<String, dynamic> reportData,
+    required List<Map<String, dynamic>> reportData,
     required Map<String, dynamic> params,
   }) = _Report;
 

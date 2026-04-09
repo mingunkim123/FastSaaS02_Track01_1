@@ -204,7 +204,7 @@ class ApiClient {
     required String reportType,
     required String title,
     String? subtitle,
-    required Map<String, dynamic> reportData,
+    required List<Map<String, dynamic>> reportData,
     required Map<String, dynamic> params,
   }) async {
     try {

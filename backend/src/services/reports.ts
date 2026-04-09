@@ -7,7 +7,7 @@ export interface SaveReportInput {
   reportType: string;
   title: string;
   subtitle?: string;
-  reportData: Record<string, unknown>;
+  reportData: Record<string, unknown>[];
   params: Record<string, unknown>;
 }
 
