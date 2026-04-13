@@ -4,7 +4,6 @@ import { createClient } from '@libsql/client';
 import { eq, and } from 'drizzle-orm';
 import * as schema from '../../src/db/schema';
 import { saveMessage, getChatHistory, clearChatHistory } from '../../src/services/chat';
-import './setup-env';
 
 /**
  * Chat Workflow Integration Tests

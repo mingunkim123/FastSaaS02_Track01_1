@@ -6,7 +6,6 @@ import * as schema from '../../src/db/schema';
 import { AIReportService } from '../../src/services/ai-report';
 import { saveMessage, getChatHistory, clearChatHistory } from '../../src/services/chat';
 import type { ReportPayload } from '../../src/types/ai';
-import './setup-env';
 
 /**
  * Mock setup for Google Generative AI
