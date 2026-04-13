@@ -11,7 +11,8 @@
     "test:e2e": "vitest run --project e2e",
     "test:coverage": "vitest run --coverage",
     "type-check": "tsc --noEmit",
-    "seed": "npx tsx src/db/seeds/index.ts"
+    "seed": "npx tsx src/db/seeds/index.ts",
+    "test:llm": "cross-env RUN_LLM_TESTS=1 vitest run --config vitest.llm.config.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.2",
@@ -21,12 +22,10 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.10",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2",
     "wrangler": "^4.4.0"
   }
-
 }
-
-
