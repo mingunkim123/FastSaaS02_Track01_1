@@ -13,7 +13,7 @@ Bring the backend from partial test coverage to comprehensive coverage across un
 - Backend (`backend/src/`) only. No Flutter or React tests.
 - Four risk tiers (Tier 1 security-critical → Tier 4 E2E user journeys), implemented in order.
 - Real in-memory SQLite (`@libsql/client` with `:memory:`) for any test that touches the DB. Migrations applied per test, fresh DB per test.
-- LLM calls mocked at the `services/llm.ts` boundary by default. A separate "smoke" suite gated by `RUN_LLM_TESTS=1` makes real Groq calls (`llama-3.1-8b-instant`) with structural assertions only.
+- LLM calls mocked at the `services/llm.ts` boundary by default. A separate "smoke" suite gated by `RUN_LLM_TESTS=1` runs inside `@cloudflare/vitest-pool-workers` so it has access to the real Workers AI binding (`env.AI`), and exercises the configured llama model via `callLLM` with structural assertions only.
 - Required-scenarios checklist per file as the exit criterion. Soft coverage report generated; no CI threshold.
 - Backend HTTP E2E using Hono's `app.fetch()` against in-memory DB and test-signed JWTs.
 
@@ -29,7 +29,7 @@ Bring the backend from partial test coverage to comprehensive coverage across un
 1. Every file in the Tier 1–3 lists has a corresponding test file with all required scenarios passing.
 2. E2E suite covers all user journeys listed in Section 4.
 3. `npm run test` runs the full unit + integration + E2E suite in <60s without external dependencies.
-4. `RUN_LLM_TESTS=1 npm run test` additionally runs the LLM smoke suite against real Groq.
+4. `RUN_LLM_TESTS=1 npm run test:llm` runs the LLM smoke suite inside the Workers runtime against real Workers AI (llama).
 5. A new developer reading the test file for any route can answer: "what is this route's security contract?"
 
 ---
@@ -74,19 +74,23 @@ The existing `tests/routes/transactions.test.ts` and `tests/services/messages.te
 
 1. **`createTestDb()`** — opens a `:memory:` libsql client, applies every `.sql` file in `src/db/migrations/` in order, returns a Drizzle instance bound to it. Each test calls this in `beforeEach`.
 
-2. **`signTestJwt(userId, opts?)`** — uses the same ES256 path as production but with a test signing key set in `setup-env.ts`. Lets tests produce real JWTs that pass `authMiddleware` without mocking it. `opts` allows expiry/issuer/audience overrides for negative tests.
+   **Required source refactor (`backend/src/db/index.ts`)**: the current `getDb(env)` always builds a libsql client from `TURSO_DB_URL`, leaving no seam for injecting an in-memory client. Add a sibling `createDb(client)` function that wraps a pre-built libsql `Client` with Drizzle. `getDb(env)` keeps its current behavior and is reimplemented in terms of `createDb`. No production behavior change. Tests then build their own `:memory:` client and pass it to `createDb`. The Hono app continues to call `getDb(env)` inside route handlers as today; the test app helper monkey-patches `getDb` via `vi.spyOn` to return the test instance, OR — preferred — `createTestApp` re-imports `getDb` from a barrel that allows injection (decided in plan Task 1).
 
-3. **`createTestApp({ db, env })`** — instantiates the Hono app from `src/index.ts` with injected bindings (test DB, test `SUPABASE_JWT_SECRET`, test `ALLOWED_ORIGINS`, mocked AI provider). Returns the app for `app.fetch(request)` calls. This is the heart of the E2E layer.
+2. **`signTestJwt(userId, opts?)`** — uses the **HS256** path as production supports both ES256 (Supabase JWKS) and HS256 (shared `SUPABASE_JWT_SECRET`). HS256 is chosen for tests because it requires only the shared secret already in env, no JWKS endpoint, no asymmetric key management. Lets tests produce real JWTs that pass `authMiddleware` without mocking it. `opts` allows expiry / claim overrides for negative tests (expired, malformed, missing `sub`).
 
-4. **`mockLlmResponse(response)`** — uses `vi.spyOn(llmService, 'callLLM')` to return a canned action JSON. Most unit/integration/E2E tests use this. The `llm-smoke/` tests do **not** use it.
+3. **`createTestApp({ db, env })`** — instantiates the Hono app from `src/index.ts` with injected bindings: test DB (via the `createDb` refactor above), test `SUPABASE_JWT_SECRET`, test `ALLOWED_ORIGINS=http://localhost:5173`, `AI_PROVIDER=workers-ai`, no real `AI` binding (tests inject mocked `callLLM`). `ENVIRONMENT=test` so the dev admin token bypass does NOT activate and tests exercise the real JWT path. Returns the app for `app.fetch(request, env)` calls. This is the heart of the E2E layer.
+
+4. **`mockLlmResponse(response)`** — uses `vi.spyOn(llmService, 'callLLM')` to return a canned string (the LLM's raw text response). Signature must match the production `callLLM(messages, config, ai?)`. Most unit/integration/E2E tests use this. The `llm-smoke/` tests do **not** use it.
 
 5. **Fixture factories** — `seedUser({ id?, email? })`, `seedSession({ userId, title? })`, `seedTransaction({ userId, amount?, ... })`. Each returns the inserted row with sensible defaults so tests stay terse.
 
 ### Vitest Configuration
 
-- Add `vitest.config.ts` with `projects` for `unit`, `integration`, `e2e`, `llm-smoke`. The `llm-smoke` project's `include` is gated by `process.env.RUN_LLM_TESTS === '1'` (otherwise empty array → no tests collected).
+- Add `vitest.config.ts` with `projects` for `unit`, `integration`, `e2e`, and `llm-smoke`.
+- Projects `unit`, `integration`, `e2e` use the default Node pool — fast, no Workers runtime needed since LLM is mocked and DB is injected `:memory:`.
+- Project `llm-smoke` uses `@cloudflare/vitest-pool-workers` so tests run inside a real Cloudflare Workers runtime with the `AI` binding available. Its `include` is gated by `process.env.RUN_LLM_TESTS === '1'` (otherwise empty array → no tests collected, dependency not loaded). A separate `vitest.llm.config.ts` (referenced from the main config's `projects`) holds the `poolOptions.workers.wrangler.configPath` setting pointing at `wrangler.jsonc`.
 - Coverage reporter: `v8`, output to `coverage/`, **no thresholds**. `npm run test:coverage` script added.
-- `setup-env.ts` extended to set deterministic `SUPABASE_JWT_SECRET`, `ALLOWED_ORIGINS`, `AI_PROVIDER=groq` for non-LLM tests.
+- `setup-env.ts` extended to set deterministic `SUPABASE_JWT_SECRET`, `ALLOWED_ORIGINS=http://localhost:5173`, `AI_PROVIDER=workers-ai`, `ENVIRONMENT=test` for non-LLM tests.
 
 ### Why Test JWTs Are Real, Not Mocked
 
@@ -250,7 +254,7 @@ Each case is a separate test so a regression points at the exact failed contract
 
 ### LLM Smoke Suite (gated by `RUN_LLM_TESTS=1`)
 
-Real Groq calls, structural assertions only. ~4-6 tests.
+Runs inside `@cloudflare/vitest-pool-workers` so the real Workers AI binding is available. Calls the configured llama model via `callLLM`. Structural assertions only. ~4-6 tests.
 
 #### `ai-parse.llm.test.ts`
 - Korean: "오늘 점심 만오천원" → action type is `create`, has numeric `amount`, category is one of the known set
@@ -270,12 +274,15 @@ These do NOT assert exact strings, exact category names beyond a known set, or e
 ### Deliverables
 
 **Code:**
-1. `backend/tests/helpers/{db,auth,app,llm-mock,fixtures}.ts` — five shared helpers
-2. `backend/vitest.config.ts` — projects for unit/integration/e2e/llm-smoke, gated `llm-smoke` include
-3. `backend/tests/integration/setup-env.ts` — extended with deterministic test secrets
-4. New test files matching the file-by-file lists in Sections 3 & 4 (~25-30 new test files total)
-5. Migration of `tests/routes/transactions.test.ts` and `tests/services/messages.test.ts` to use real in-memory DB
-6. `package.json` scripts: `test:unit`, `test:integration`, `test:e2e`, `test:llm`, `test:coverage`
+1. `backend/src/db/index.ts` — small refactor: extract `createDb(client)`, reimplement `getDb(env)` in terms of it
+2. `backend/tests/helpers/{db,auth,app,llm-mock,fixtures}.ts` — five shared helpers
+3. `backend/vitest.config.ts` — projects for unit/integration/e2e plus a sub-config for llm-smoke; gated `llm-smoke` include
+4. `backend/vitest.llm.config.ts` — workers-pool config for the LLM smoke suite
+5. `backend/tests/integration/setup-env.ts` — extended with deterministic test secrets (HS256 JWT secret, `AI_PROVIDER=workers-ai`, `ENVIRONMENT=test`)
+6. New test files matching the file-by-file lists in Sections 3 & 4 (~25-30 new test files total)
+7. Migration of `tests/routes/transactions.test.ts` and `tests/services/messages.test.ts` to use real in-memory DB via the new helpers
+8. `package.json` scripts: `test:unit`, `test:integration`, `test:e2e`, `test:llm`, `test:coverage`
+9. `@cloudflare/vitest-pool-workers` added to `devDependencies`
 
 **Docs:**
 7. `docs/testing.md` — how to run each suite, how to add a new route's test (the universal-scenarios template), how to enable LLM smoke tests locally
@@ -300,7 +307,9 @@ The `writing-plans` skill will turn this into ordered steps. Rough order:
 | Risk | Mitigation |
 |---|---|
 | In-memory libsql behaves differently from production Turso (foreign keys, RETURNING, etc.) | Apply real migration files, not schema push. Spot-check a few tricky queries by running the same test against a local Turso file DB. Document any divergences found. |
-| Real-LLM smoke tests become flaky and get disabled | Keep the suite tiny (4-6 tests), structural assertions only, gated off by default. If a test flakes twice, it gets weakened or removed — never silently retried. |
+| `createDb(client)` refactor breaks production | Refactor is mechanical: extract Drizzle wrapper into a 3-line helper, `getDb(env)` calls it. Type-check + existing tests + manual `npm run dev` smoke check verify before merging. |
+| `vitest-pool-workers` adds heavy dependency | Only the `llm-smoke` project uses it, only when `RUN_LLM_TESTS=1`. Default `npm run test` does not load the pool. |
+| Workers AI llama model returns unexpected response shapes that break smoke tests | Smoke assertions check structure only (action type is in known set, has numeric amount). If the model drifts, weaken the assertion or disable the test — never retry silently. |
 | Tests grow brittle as the schema evolves | Fixture factories centralize defaults; schema changes update factories in one place. Avoid hand-built insert objects in test bodies. |
 | Universal-scenarios checklist becomes copy-paste boilerplate | `expectAuthContract(app, method, path)` runs the four universal negative cases in one call. Per-route tests only write route-specific scenarios. |
 | Coverage suite slow → developers skip running it | Target <60s total for unit+integration+e2e. Each layer runnable independently. Fresh in-memory DB per test stays under budget at expected scale. If it doesn't, drop to shared-DB-with-truncate as escape hatch. |
