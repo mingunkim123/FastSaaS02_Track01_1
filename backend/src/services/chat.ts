@@ -1,4 +1,4 @@
-import { eq, desc, lt } from 'drizzle-orm';
+import { eq, desc, lt, and } from 'drizzle-orm';
 import { chatMessages } from '../db/schema';
 
 /**
@@ -127,12 +127,13 @@ export async function clearChatHistory(
 export async function getChatHistoryBySession(
   db: any,
   sessionId: number,
+  userId: string,
   limit: number = 50
 ): Promise<Array<{ id: number; role: 'user' | 'assistant'; content: string; metadata?: Record<string, unknown>; createdAt: string }>> {
   const messages = await db
     .select()
     .from(chatMessages)
-    .where(eq(chatMessages.sessionId, sessionId))
+    .where(and(eq(chatMessages.sessionId, sessionId), eq(chatMessages.userId, userId)))
     .orderBy(desc(chatMessages.createdAt))
     .limit(limit)
     .all();

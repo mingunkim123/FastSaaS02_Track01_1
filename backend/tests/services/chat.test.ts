@@ -63,7 +63,7 @@ describe('Chat Service - Session-Aware Functions', () => {
 
   describe('getChatHistoryBySession', () => {
     it('should fetch messages for a session', async () => {
-      const messages = await getChatHistoryBySession(mockDb, 1);
+      const messages = await getChatHistoryBySession(mockDb, 1, 'user-123');
 
       expect(mockDb.where).toHaveBeenCalled();
       expect(Array.isArray(messages)).toBe(true);
@@ -74,7 +74,7 @@ describe('Chat Service - Session-Aware Functions', () => {
         { id: 1, role: 'assistant', content: 'Report', metadata: '{"actionType":"report"}', createdAt: '2026-04-07T00:00:00Z' }
       ]);
 
-      const messages = await getChatHistoryBySession(mockDb, 1);
+      const messages = await getChatHistoryBySession(mockDb, 1, 'user-123');
 
       expect(messages[0].metadata).toEqual({ actionType: 'report' });
     });
@@ -85,14 +85,14 @@ describe('Chat Service - Session-Aware Functions', () => {
         { id: 1, role: 'user', content: 'Earlier', metadata: null, createdAt: '2026-04-07T00:00:00Z' }
       ]);
 
-      const messages = await getChatHistoryBySession(mockDb, 1);
+      const messages = await getChatHistoryBySession(mockDb, 1, 'user-123');
 
       expect(messages[0].content).toBe('Earlier');
       expect(messages[1].content).toBe('Later');
     });
 
     it('should respect limit parameter', async () => {
-      await getChatHistoryBySession(mockDb, 1, 20);
+      await getChatHistoryBySession(mockDb, 1, 'user-123', 20);
 
       expect(mockDb.limit).toHaveBeenCalledWith(20);
     });

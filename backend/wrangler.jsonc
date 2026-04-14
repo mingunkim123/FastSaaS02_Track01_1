@@ -5,7 +5,9 @@
 	"compatibility_date": "2026-03-24",
 	"compatibility_flags": ["nodejs_compat"],
 	"vars": {
-		"AI_PROVIDER": "workers-ai"
+		"AI_PROVIDER": "workers-ai",
+		"SUPABASE_URL": "your-supabase-url",
+		"ALLOWED_ORIGINS": "http://localhost:3000,http://localhost:5173"
 	},
 	"observability": {
 		"logs": {

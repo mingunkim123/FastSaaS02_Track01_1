@@ -48,6 +48,7 @@ async function runSeeds() {
     TURSO_DB_URL: process.env.TURSO_DB_URL || '',
     TURSO_AUTH_TOKEN: process.env.TURSO_AUTH_TOKEN || '',
     SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET || '',
+    SUPABASE_URL: process.env.SUPABASE_URL || '',
   };
 
   if (!env.TURSO_DB_URL || !env.TURSO_AUTH_TOKEN) {

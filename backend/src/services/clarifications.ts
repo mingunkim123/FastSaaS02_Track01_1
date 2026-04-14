@@ -63,7 +63,7 @@ export class ClarificationService {
     try {
       return JSON.parse(result[0].state) as ClarificationState;
     } catch (error) {
-      console.error(`Failed to parse clarification state for user ${userId}, session ${chatSessionId}:`, error);
+      console.error('[Clarification] Failed to parse clarification state:', error);
       return null;
     }
   }

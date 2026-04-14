@@ -66,7 +66,7 @@ moneyNote(리뷰 1.2만)-기록(지출/수입여부(with계산기), 카테로그
 
 techstack은 
 
-/superpowers-brainstorm 가계부 앱을 만들려고해, 기능은 가장 컴팩트하게, 1번으로 지출/수입을 기록하는 기능, 2번으로 달력엣 해당 날짜를 누르면 그 기록된거를 볼수있는 기능, 3번으로 그 달의 전체적인 통계를 그래프 형태로 볼수있는 기능. techstack은 프론트는 vite + react(cloudflare pages), 백엔드는 hono(cloudflare workers), DB는 turso를 채용할 예정이야. frontend/ 랑 backend/는 따로 배포할거니까, 프로젝트 루트에서 분리해줘.
+/superpowers-brainstorm 가계부 앱을 만들려고해, 기능은 가장 컴팩트하게, 1번으로 지출/수입을 기록하는 기능, 2번으로 달력엣 해당 날짜를 누르면 그 기록된거를 볼수있는 기능, 3번으로 그 달의 전체적인 통계를 그래프 형태로 볼수있는 기능. techstack은 프론트는 vite + react , 백엔드는 hono(node.js), DB는 sqlite, orm은 drizzle, ui는 tailwind+daisyui 채용할 예정이야. 
 
 
 프로젝트 루트

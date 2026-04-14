@@ -22,10 +22,16 @@ app.get('/', (c) => c.text('Hello! FastSaaS Backend is running!'));
 // CORS 설정: 이 도메인들의 요청만 허용
 // localhost:5173는 개발 환경, localhost:3000은 Flutter 웹 개발 환경
 // capacitor://는 모바일 앱, pages.dev는 프로덕션
-app.use('*', cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'capacitor://localhost', 'https://fastsaas02-track01-1.pages.dev', 'https://fastsaas2.fastsaas2.workers.dev'],
+// ALLOWED_ORIGINS env var (comma-separated) overrides the defaults when set
+const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://localhost:3000', 'capacitor://localhost', 'https://fastsaas02-track01-1.pages.dev', 'https://fastsaas2.fastsaas2.workers.dev'];
 
-}));
+app.use('*', async (c, next) => {
+  const envOrigins = c.env.ALLOWED_ORIGINS;
+  const allowedOrigins = envOrigins
+    ? envOrigins.split(',').map((o: string) => o.trim()).filter(Boolean)
+    : DEFAULT_ALLOWED_ORIGINS;
+  return cors({ origin: allowedOrigins })(c, next);
+});
 
 // 로깅 미들웨어: 모든 요청/응답 기록
 app.use('*', loggingMiddleware);
@@ -59,4 +65,33 @@ app.onError((err, c) => {
   return c.json({ error: err.message ?? 'Internal Server Error' }, 500);
 });
 
-export default app;
+// Required environment variables — validated at request time (Workers start without env access)
+const REQUIRED_ENV_VARS: (keyof Env)[] = [
+  'SUPABASE_JWT_SECRET',
+  'TURSO_DB_URL',
+  'TURSO_AUTH_TOKEN',
+  'SUPABASE_URL',
+];
+
+let envValidated = false;
+
+function validateEnv(env: Env): void {
+  if (envValidated) return;
+  const missing = REQUIRED_ENV_VARS.filter((key) => !env[key]);
+  if (missing.length > 0) {
+    console.error(
+      `[Startup] Missing required environment variables: ${missing.join(', ')}. ` +
+        'Requests may fail. Set these via wrangler secret or .dev.vars.'
+    );
+  } else {
+    console.log('[Startup] All required environment variables are present.');
+  }
+  envValidated = true;
+}
+
+export default {
+  fetch(request: Request, env: Env, ctx: Parameters<typeof app.fetch>[2]): Response | Promise<Response> {
+    validateEnv(env);
+    return app.fetch(request, env, ctx);
+  },
+};

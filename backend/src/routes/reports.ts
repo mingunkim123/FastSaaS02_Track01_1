@@ -4,8 +4,12 @@ import { z } from 'zod';
 import { getDb, Env } from '../db/index';
 import type { Variables } from '../middleware/auth';
 import { ReportService, updateReportTitle } from '../services/reports';
+import { createRateLimiter } from '../middleware/rateLimit';
 
 const router = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+// 10 report saves per minute per user
+const reportWriteRateLimit = createRateLimiter(10, 60_000);
 
 // Validation schema for save report
 const SaveReportSchema = z.object({
@@ -19,7 +23,7 @@ const SaveReportSchema = z.object({
 type SaveReportPayload = z.infer<typeof SaveReportSchema>;
 
 // POST /api/reports - Save a report
-router.post('/', async (c) => {
+router.post('/', reportWriteRateLimit, async (c) => {
   try {
     const userId = c.get('userId');
     const body = await c.req.json();
@@ -59,7 +63,7 @@ router.get('/', async (c) => {
     const userId = c.get('userId');
     const month = c.req.query('month');
     const limitStr = c.req.query('limit') || '50';
-    const limit = Math.min(parseInt(limitStr), 100);
+    const limit = Math.min(Math.max(parseInt(limitStr) || 50, 1), 100);
 
     const db = getDb(c.env);
     const reportService = new ReportService(db);
@@ -166,9 +170,13 @@ router.delete('/:id', async (c) => {
 // PATCH /api/reports/:id - Update report title
 router.patch('/:id', async (c) => {
   const userId = c.get('userId');
-  const reportId = parseInt(c.req.param('id'));
+  const reportId = parseInt(c.req.param('id'), 10);
   const body = await c.req.json();
   const { title } = body;
+
+  if (isNaN(reportId)) {
+    return c.json({ error: 'Invalid report ID' }, 400);
+  }
 
   if (!title || typeof title !== 'string') {
     return c.json({ error: 'Title is required and must be a string' }, 400);

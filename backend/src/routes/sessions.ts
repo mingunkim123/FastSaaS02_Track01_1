@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { getDb, Env } from '../db/index';
 import type { Variables } from '../middleware/auth';
+import { createRateLimiter } from '../middleware/rateLimit';
 import { chatMessages, transactions, reports, type TransactionSnapshot } from '../db/schema';
 import { eq, desc, isNull, and, inArray, sql } from 'drizzle-orm';
 import { AIService } from '../services/ai';
@@ -31,6 +32,9 @@ import {
 } from '../services/sessions';
 
 const router = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+// 20 AI requests per minute per user
+const sessionMessageRateLimit = createRateLimiter(20, 60_000);
 
 function buildMetadata(
   actionType: string,
@@ -313,7 +317,7 @@ router.get('/:sessionId/messages', async (c) => {
 });
 
 // POST /api/sessions/:sessionId/messages - Send message in session with full AI processing
-router.post('/:sessionId/messages', async (c) => {
+router.post('/:sessionId/messages', sessionMessageRateLimit, async (c) => {
   try {
     const db = getDb(c.env);
     const userId = c.get('userId');
@@ -1024,13 +1028,21 @@ How can I help with your finances?`;
           );
       }
     } catch (error) {
-      console.error('AI action execution error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to process request';
-      const status = 400;
-      return c.json(
-        { success: false, error: errorMessage },
-        status
-      );
+      const errorName = error instanceof Error ? error.name : typeof error;
+      const errorMsg = error instanceof Error ? error.message : String(error);
+
+      if (error instanceof Error && (error.name === 'ZodError' || /^Text input|^Transaction ID|^Amount must|^Amount exceeds|^Invalid date|^Date cannot|^Category cannot/.test(error.message))) {
+        console.error(`[Session action] Validation error (${errorName}):`, errorMsg);
+        return c.json({ success: false, error: 'Invalid request data' }, 400);
+      }
+
+      if (error instanceof Error && /timeout|network|fetch|LLM|model/i.test(error.message)) {
+        console.error(`[Session action] LLM/network error (${errorName}):`, errorMsg);
+        return c.json({ success: false, error: 'AI service temporarily unavailable, please try again' }, 503);
+      }
+
+      console.error(`[Session action] DB/internal error (${errorName}):`, errorMsg);
+      return c.json({ success: false, error: 'An unexpected error occurred' }, 500);
     }
 
     // Return both user and AI messages
@@ -1062,11 +1074,21 @@ How can I help with your finances?`;
       200
     );
   } catch (error) {
-    console.error('Error sending session message:', error);
-    return c.json(
-      { success: false, error: 'Failed to send message' },
-      500
-    );
+    const errorName = error instanceof Error ? error.name : typeof error;
+    const errorMsg = error instanceof Error ? error.message : String(error);
+
+    if (error instanceof Error && /timeout|network|fetch|LLM|model/i.test(error.message)) {
+      console.error(`[Session message] LLM/network error (${errorName}):`, errorMsg);
+      return c.json({ success: false, error: 'AI service temporarily unavailable, please try again' }, 503);
+    }
+
+    if (error instanceof Error && /SQLITE|database|constraint|foreign key/i.test(error.message)) {
+      console.error(`[Session message] DB error (${errorName}):`, errorMsg);
+      return c.json({ success: false, error: 'An unexpected error occurred' }, 500);
+    }
+
+    console.error(`[Session message] Unhandled error (${errorName}):`, errorMsg);
+    return c.json({ success: false, error: 'Failed to send message' }, 500);
   }
 });
 

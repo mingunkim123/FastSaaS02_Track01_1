@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import { getDb, Env } from '../db/index';
 import { transactions, chatMessages, reports } from '../db/schema';
 import type { Variables } from '../middleware/auth';
+import { createRateLimiter } from '../middleware/rateLimit';
 import type { Transaction } from '../db/schema';
 import { AIService } from '../services/ai';
 import { getLLMConfig } from '../services/llm';
@@ -20,6 +21,7 @@ import {
 import * as messages from '../services/messages';
 import { saveMessage, getChatHistory, clearChatHistory, saveMessageToSession } from '../services/chat';
 import { AIReportService } from '../services/ai-report';
+import { getSession } from '../services/sessions';
 import type { ActionType } from '../types/ai';
 import { and, eq, isNull, desc, inArray, sql } from 'drizzle-orm';
 import { clarificationService } from '../services/clarifications';
@@ -34,6 +36,9 @@ Try asking me things like:
 What would you like to do?`;
 
 const router = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+// 20 AI requests per minute per user
+const aiActionRateLimit = createRateLimiter(20, 60_000);
 
 function isAIServiceError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AIServiceError';
@@ -91,7 +96,7 @@ function generateClarificationQuestion(
 }
 
 // POST /api/ai/action
-router.post('/action', async (c) => {
+router.post('/action', aiActionRateLimit, async (c) => {
   try {
     const db = getDb(c.env);
     const userId = c.get('userId');
@@ -108,6 +113,15 @@ router.post('/action', async (c) => {
       return c.json(
         { success: false, error: 'Session ID is required' },
         400
+      );
+    }
+
+    // Verify the session belongs to the authenticated user before writing anything
+    const session = await getSession(db, sessionId, userId);
+    if (!session) {
+      return c.json(
+        { success: false, error: 'Session not found or access denied' },
+        403
       );
     }
 
@@ -531,13 +545,22 @@ router.post('/action', async (c) => {
         );
     }
   } catch (error) {
-    console.error('AI action error:', error);
-    const message = error instanceof Error ? error.message : 'Failed to process request';
-    const status = isAIServiceError(error) ? 502 : isClientError(error) ? 400 : 500;
-    return c.json(
-      { success: false, error: message },
-      status
-    );
+    const errorName = error instanceof Error ? error.name : typeof error;
+    const errorMsg = error instanceof Error ? error.message : String(error);
+
+    if (isClientError(error)) {
+      console.error(`[AI action] Validation error (${errorName}):`, errorMsg);
+      return c.json({ success: false, error: 'Invalid request data' }, 400);
+    }
+
+    if (isAIServiceError(error) || (error instanceof Error && /timeout|network|fetch|LLM|model/i.test(error.message))) {
+      console.error(`[AI action] LLM/network error (${errorName}):`, errorMsg);
+      return c.json({ success: false, error: 'AI service temporarily unavailable, please try again' }, 503);
+    }
+
+    // Database or unknown errors
+    console.error(`[AI action] Internal error (${errorName}):`, errorMsg);
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500);
   }
 });
 
@@ -548,9 +571,10 @@ router.get('/chat/history', async (c) => {
 
   // Parse query parameters
   const limitStr = c.req.query('limit') || '50';
-  const limit = parseInt(limitStr);
+  const limit = Math.min(Math.max(parseInt(limitStr) || 50, 1), 200);
   const beforeStr = c.req.query('before');
-  const beforeId = beforeStr ? parseInt(beforeStr) : undefined;
+  const parsedBefore = beforeStr ? parseInt(beforeStr) : NaN;
+  const beforeId = !isNaN(parsedBefore) ? parsedBefore : undefined;
 
   try {
     const history = await getChatHistory(db, userId, limit, beforeId);
