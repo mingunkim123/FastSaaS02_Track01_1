@@ -1,0 +1,112 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * 1'  # 매주 월요일 오전 2시
+
+jobs:
+  # ────────────────────────────────────────────
+  # 1. CodeQL — 데이터 흐름 분석 (IDOR, injection 등)
+  # ────────────────────────────────────────────
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:javascript-typescript
+
+  # ────────────────────────────────────────────
+  # 2. Semgrep — 커스텀 규칙 + secrets + typescript
+  # ────────────────────────────────────────────
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Semgrep
+        run: pip install semgrep
+
+      - name: Run custom rules
+        run: semgrep scan --config .semgrep.yml backend/src/ --sarif --output semgrep-custom.sarif
+        continue-on-error: true
+
+      - name: Run p/secrets
+        run: semgrep scan --config p/secrets backend/src/ --sarif --output semgrep-secrets.sarif
+        continue-on-error: true
+
+      - name: Run p/typescript
+        run: semgrep scan --config p/typescript backend/src/ --sarif --output semgrep-typescript.sarif
+        continue-on-error: true
+
+      - name: Upload custom rules results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep-custom.sarif
+          category: semgrep-custom
+
+      - name: Upload secrets results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep-secrets.sarif
+          category: semgrep-secrets
+
+      - name: Upload typescript results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep-typescript.sarif
+          category: semgrep-typescript
+
+  # ────────────────────────────────────────────
+  # 3. npm audit — 의존성 CVE 체크
+  # ────────────────────────────────────────────
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+        working-directory: backend
