@@ -38,14 +38,26 @@ void main() async {
   // → Android 알림에서 텍스트를 입력하면 이 핸들러가 받아서 서버로 전송
   installQuickEntryHandler();
 
-  // Android 전용: 상단바에 상주하는 알림(포그라운드 서비스) 시작
+  // Android 전용: 알림 권한 확인 후 포그라운드 서비스 시작
   // → 이 알림을 통해 앱을 열지 않고도 거래를 빠르게 입력할 수 있음
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
     try {
-      await ForegroundServiceManager.startForegroundService(
-        title: 'FastSaaS 가계부',
-        body: '알림을 눌러 거래를 바로 입력하세요\n예) 점심 8000원 / 교통비 1250원',
-      );
+      final hasPermission =
+          await ForegroundServiceManager.hasNotificationPermission();
+      if (!hasPermission) {
+        await ForegroundServiceManager.requestNotificationPermission();
+      }
+      // 권한이 허용된 경우에만 서비스 시작
+      final granted =
+          await ForegroundServiceManager.hasNotificationPermission();
+      if (granted) {
+        await ForegroundServiceManager.startForegroundService(
+          title: 'FastSaaS 가계부',
+          body: '알림을 눌러 거래를 바로 입력하세요\n예) 점심 8000원 / 교통비 1250원',
+        );
+      } else {
+        Logger().warn('알림 권한이 거부되어 포그라운드 서비스를 시작하지 않음');
+      }
     } catch (e) {
       Logger().error('Failed to start foreground service: $e', error: e);
     }
