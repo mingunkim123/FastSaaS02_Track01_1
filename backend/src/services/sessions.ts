@@ -49,7 +49,8 @@ export async function createSession(
  */
 export async function listSessions(
   db: any,
-  userId: string
+  userId: string,
+  limit = 50
 ): Promise<
   Array<{
     id: number;
@@ -64,6 +65,7 @@ export async function listSessions(
     .from(sessionsTable)
     .where(eq(sessionsTable.userId, userId))
     .orderBy(desc(sessionsTable.updatedAt))
+    .limit(limit)
     .all();
 
   return sessionList;

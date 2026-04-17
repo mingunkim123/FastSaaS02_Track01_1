@@ -337,11 +337,12 @@ class ApiClient {
     }
   }
 
-  /// Get all sessions for the current user
-  /// GET /api/sessions
-  Future<Map<String, dynamic>> getSessions() async {
+  /// Get sessions for the current user
+  /// GET /api/sessions?limit=50
+  Future<Map<String, dynamic>> getSessions({int limit = 50}) async {
     try {
-      final response = await _dio.get('/sessions');
+      final response = await _dio.get('/sessions',
+          queryParameters: {'limit': limit});
 
       if (response.statusCode == 200) {
         return response.data as Map<String, dynamic>;

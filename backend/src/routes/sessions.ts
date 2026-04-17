@@ -131,8 +131,9 @@ router.get('/', async (c) => {
   try {
     const db = getDb(c.env);
     const userId = c.get('userId');
+    const limit = Math.min(Number(c.req.query('limit') ?? 50), 100);
 
-    const sessions = await listSessions(db, userId);
+    const sessions = await listSessions(db, userId, limit);
 
     return c.json(
       {
