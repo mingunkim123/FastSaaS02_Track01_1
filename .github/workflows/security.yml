@@ -8,6 +8,9 @@ on:
   schedule:
     - cron: '0 2 * * 1'  # 매주 월요일 오전 2시
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # ────────────────────────────────────────────
   # 1. CodeQL — 데이터 흐름 분석 (IDOR, injection 등)
@@ -23,16 +26,16 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
           queries: security-extended
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
 
       - name: Analyze
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: /language:javascript-typescript
 
@@ -69,21 +72,21 @@ jobs:
         continue-on-error: true
 
       - name: Upload custom rules results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: semgrep-custom.sarif
           category: semgrep-custom
 
       - name: Upload secrets results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: semgrep-secrets.sarif
           category: semgrep-secrets
 
       - name: Upload typescript results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: semgrep-typescript.sarif
@@ -101,7 +104,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install dependencies
         run: npm ci
