@@ -66,6 +66,13 @@
             android:name=".QuickEntryReceiver"
             android:exported="false" />
 
+        <!-- AdMob App ID (Google official test App ID for Android).
+             Replace with real App ID when AdMob account is set up.
+             Docs: https://developers.google.com/admob/flutter/quick-start -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
