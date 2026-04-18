@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_app/app.dart';
 import 'package:flutter_app/core/auth/supabase_auth.dart';
 import 'package:flutter_app/core/logger/logger.dart';
@@ -26,6 +27,10 @@ void main() async {
 
   // .env 파일에서 API URL, Supabase 키 등 환경변수 로드
   await dotenv.load(fileName: '.env');
+
+  // 한국어 로케일 데이터 초기화 — DateFormat에 'ko' 로케일을 쓰려면 필요
+  // (요일 'E'를 '금', 'EEEE'를 '금요일', 'a'를 '오전/오후'로 렌더)
+  await initializeDateFormatting('ko', null);
 
   // Supabase 인증 서비스 초기화 (로그인/회원가입 기능에 필요)
   try {
