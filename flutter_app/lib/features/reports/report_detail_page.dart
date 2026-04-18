@@ -7,6 +7,8 @@ import 'package:flutter_app/shared/widgets/empty_state.dart';
 import 'package:flutter_app/shared/widgets/glass_card.dart';
 import '../../shared/models/report.dart';
 import '../../shared/providers/report_provider.dart';
+import '../../shared/widgets/ad_banner.dart';
+import '../../shared/widgets/ad_interstitial_trigger.dart';
 import '../ai_chat/widgets/report_card.dart';
 import '../ai_chat/widgets/report_chart.dart';
 import 'widgets/report_name_dialog.dart';
@@ -35,6 +37,18 @@ class ReportDetailPage extends ConsumerStatefulWidget {
 class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
   bool _isSaving = false;
   bool _isDeleting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Show interstitial ad on report generation complete (Free users only,
+    // silently skipped if no ad is cached). Deferred to post-frame so the
+    // report UI renders first.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      AdInterstitialTrigger.showIfFree(ref);
+    });
+  }
 
   Widget _buildSection(Map<String, dynamic> section) {
     final type = section['type'] as String? ?? 'card';
@@ -173,47 +187,54 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
       appBar: AppBar(
         title: const Text('리포트'),
       ),
-      body: reportAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => EmptyState(
-          icon: Icons.error_outline,
-          title: '리포트를 불러오지 못했습니다',
-          subtitle: error.toString(),
-          actionLabel: '재시도',
-          onAction: () =>
-              ref.invalidate(getReportDetailProvider(widget.reportId)),
-        ),
-        data: (report) => CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: AnimatedFadeSlide(
-                child: _buildHeader(theme, report),
+      body: Column(
+        children: [
+          Expanded(
+            child: reportAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => EmptyState(
+                icon: Icons.error_outline,
+                title: '리포트를 불러오지 못했습니다',
+                subtitle: error.toString(),
+                actionLabel: '재시도',
+                onAction: () =>
+                    ref.invalidate(getReportDetailProvider(widget.reportId)),
               ),
-            ),
-            if (report.reportData.isNotEmpty)
-              SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final section = report.reportData[index];
-                    return AnimatedFadeSlide(
-                      delay: Duration(milliseconds: 80 + 60 * index),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.lg,
-                          vertical: AppSpacing.sm,
-                        ),
-                        child: _buildSection(section),
+              data: (report) => CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: AnimatedFadeSlide(
+                      child: _buildHeader(theme, report),
+                    ),
+                  ),
+                  if (report.reportData.isNotEmpty)
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final section = report.reportData[index];
+                          return AnimatedFadeSlide(
+                            delay: Duration(milliseconds: 80 + 60 * index),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.lg,
+                                vertical: AppSpacing.sm,
+                              ),
+                              child: _buildSection(section),
+                            ),
+                          );
+                        },
+                        childCount: report.reportData.length,
                       ),
-                    );
-                  },
-                  childCount: report.reportData.length,
-                ),
+                    ),
+                  const SliverPadding(
+                    padding: EdgeInsets.only(bottom: AppSpacing.xxl),
+                  ),
+                ],
               ),
-            const SliverPadding(
-              padding: EdgeInsets.only(bottom: AppSpacing.xxl),
             ),
-          ],
-        ),
+          ),
+          const AdBanner(),
+        ],
       ),
       bottomNavigationBar: reportAsync.whenData(_buildBottomBar).value,
     );
