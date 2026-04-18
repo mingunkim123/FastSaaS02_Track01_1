@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_app/shared/models/transaction.dart';
 import 'package:flutter_app/shared/providers/transaction_provider.dart';
 import 'package:flutter_app/core/theme/app_theme.dart';
+import 'package:flutter_app/shared/widgets/ad_banner.dart';
 import 'package:flutter_app/shared/widgets/animated_fade_slide.dart';
 import 'package:flutter_app/shared/widgets/empty_state.dart';
 import 'package:flutter_app/shared/widgets/glass_card.dart';
@@ -132,88 +133,95 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('달력')),
-      body: txsAsync.when(
-        loading: () => Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            children: [
-              SkeletonBox(
-                width: double.infinity,
-                height: 320,
-                borderRadius: BorderRadius.circular(AppRadii.card),
+      body: Column(
+        children: [
+          Expanded(
+            child: txsAsync.when(
+              loading: () => Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  children: [
+                    SkeletonBox(
+                      width: double.infinity,
+                      height: 320,
+                      borderRadius: BorderRadius.circular(AppRadii.card),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Row(
+                      children: [
+                        Expanded(child: SkeletonBox(height: 72, borderRadius: BorderRadius.circular(AppRadii.card))),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(child: SkeletonBox(height: 72, borderRadius: BorderRadius.circular(AppRadii.card))),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    const SkeletonCard(),
+                    const SizedBox(height: AppSpacing.sm),
+                    const SkeletonCard(),
+                  ],
+                ),
               ),
-              const SizedBox(height: AppSpacing.lg),
-              Row(
-                children: [
-                  Expanded(child: SkeletonBox(height: 72, borderRadius: BorderRadius.circular(AppRadii.card))),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(child: SkeletonBox(height: 72, borderRadius: BorderRadius.circular(AppRadii.card))),
-                ],
+              error: (error, _) => EmptyState(
+                icon: Icons.error_outline,
+                title: '오류가 발생했습니다',
+                subtitle: error.toString(),
+                actionLabel: '재시도',
+                onAction: () => ref.invalidate(transactionsProvider),
               ),
-              const SizedBox(height: AppSpacing.lg),
-              const SkeletonCard(),
-              const SizedBox(height: AppSpacing.sm),
-              const SkeletonCard(),
-            ],
-          ),
-        ),
-        error: (error, _) => EmptyState(
-          icon: Icons.error_outline,
-          title: '오류가 발생했습니다',
-          subtitle: error.toString(),
-          actionLabel: '재시도',
-          onAction: () => ref.invalidate(transactionsProvider),
-        ),
-        data: (transactions) {
-          final monthTxs = _monthTxs(transactions);
-          final selectedTxs =
-              transactions.where((t) => t.date == _fmt(_selectedDate)).toList();
-          final totals = _dailyTotals(transactions, _selectedDate);
+              data: (transactions) {
+                final monthTxs = _monthTxs(transactions);
+                final selectedTxs =
+                    transactions.where((t) => t.date == _fmt(_selectedDate)).toList();
+                final totals = _dailyTotals(transactions, _selectedDate);
 
-          return RefreshIndicator(
-            onRefresh: () async {
-              ref.invalidate(transactionsProvider);
-              await ref.read(transactionsProvider(null).future);
-            },
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  AnimatedFadeSlide(
-                    child: _buildCalendarCard(monthTxs),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    ref.invalidate(transactionsProvider);
+                    await ref.read(transactionsProvider(null).future);
+                  },
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        AnimatedFadeSlide(
+                          child: _buildCalendarCard(monthTxs),
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
 
-                  AnimatedFadeSlide(
-                    delay: const Duration(milliseconds: 100),
-                    child: _buildDailySummary(
-                      expense: totals['expense']!,
-                      income: totals['income']!,
+                        AnimatedFadeSlide(
+                          delay: const Duration(milliseconds: 100),
+                          child: _buildDailySummary(
+                            expense: totals['expense']!,
+                            income: totals['income']!,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+
+                        AnimatedFadeSlide(
+                          delay: const Duration(milliseconds: 180),
+                          child: _buildListHeader(selectedTxs.length),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+
+                        if (selectedTxs.isEmpty)
+                          const EmptyState(
+                            icon: Icons.receipt_long_outlined,
+                            title: '이 날에 거래가 없습니다',
+                            subtitle: '기록 탭에서 새 거래를 추가해 보세요',
+                          )
+                        else
+                          _buildTxList(selectedTxs),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.lg),
-
-                  AnimatedFadeSlide(
-                    delay: const Duration(milliseconds: 180),
-                    child: _buildListHeader(selectedTxs.length),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-
-                  if (selectedTxs.isEmpty)
-                    const EmptyState(
-                      icon: Icons.receipt_long_outlined,
-                      title: '이 날에 거래가 없습니다',
-                      subtitle: '기록 탭에서 새 거래를 추가해 보세요',
-                    )
-                  else
-                    _buildTxList(selectedTxs),
-                ],
-              ),
+                );
+              },
             ),
-          );
-        },
+          ),
+          const AdBanner(),
+        ],
       ),
     );
   }
