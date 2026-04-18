@@ -6,22 +6,15 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_app/shared/models/transaction.dart';
 import 'package:flutter_app/shared/providers/transaction_provider.dart';
 import 'package:flutter_app/core/theme/app_theme.dart';
+import 'package:flutter_app/shared/widgets/animated_fade_slide.dart';
+import 'package:flutter_app/shared/widgets/empty_state.dart';
+import 'package:flutter_app/shared/widgets/glass_card.dart';
+import 'package:flutter_app/shared/widgets/skeleton.dart';
+import 'package:flutter_app/shared/widgets/transaction_tile.dart';
 
 // ============================================================
 // [달력 화면] calendar_page.dart
-// 월별 달력과 날짜별 거래 내역을 보여주는 화면입니다. (하단탭 2번)
-//
-// 구성:
-//   1) 월간 달력 (TableCalendar 패키지)
-//      - 날짜별로 지출(빨간점)/수입(파란점) 인디케이터 표시
-//      - 날짜 탭 → 해당 날짜의 거래 목록 필터링
-//   2) 일간 요약 카드: 선택된 날짜의 총 지출/총 수입
-//   3) 거래 목록: 카테고리 이모지, 금액, 메모 표시 + 삭제 버튼
-//
-// 데이터 흐름:
-//   transactionsProvider(null) → 전체 거래 로드
-//   → 현재 월 거래 필터링 (달력 인디케이터용)
-//   → 선택 날짜 거래 필터링 (목록 표시용)
+// 월별 달력 + 선택 날짜의 거래 목록.
 // ============================================================
 class CalendarPage extends ConsumerStatefulWidget {
   const CalendarPage({super.key});
@@ -40,8 +33,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     _selectedDate = DateTime.now();
     _focusedDate = DateTime.now();
 
-    // Check for date query parameter from AI action button
     Future.microtask(() {
+      if (!mounted) return;
       final dateStr = GoRouterState.of(context).uri.queryParameters['date'];
       if (dateStr != null) {
         try {
@@ -50,102 +43,50 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
             _selectedDate = date;
             _focusedDate = date;
           });
-        } catch (e) {
-          // Invalid date format, ignore and use current date
-        }
+        } catch (_) {/* ignore */}
       }
     });
   }
 
-  /// Get the formatted date string for API calls (YYYY-MM-DD)
-  String _getFormattedDate(DateTime date) {
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
+  String _fmt(DateTime date) =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
-  /// Get daily totals for expense and income for a specific date
-  Map<String, double> _getDailyTotals(List<Transaction> transactions, DateTime date) {
-    final dateStr = _getFormattedDate(date);
-    double totalExpense = 0;
-    double totalIncome = 0;
+  String _formatCurrency(num value) =>
+      '₩${value.toStringAsFixed(0).replaceAllMapped(
+        RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+        (m) => '${m[1]},',
+      )}';
 
-    for (final transaction in transactions) {
-      if (transaction.date == dateStr) {
-        if (transaction.type == 'expense') {
-          totalExpense += transaction.amount.toDouble();
-        } else if (transaction.type == 'income') {
-          totalIncome += transaction.amount.toDouble();
-        }
-      }
+  Map<String, double> _dailyTotals(List<Transaction> txs, DateTime date) {
+    final s = _fmt(date);
+    double e = 0, i = 0;
+    for (final t in txs) {
+      if (t.date != s) continue;
+      if (t.type == 'expense') e += t.amount.toDouble();
+      if (t.type == 'income') i += t.amount.toDouble();
     }
-
-    return {
-      'expense': totalExpense,
-      'income': totalIncome,
-    };
+    return {'expense': e, 'income': i};
   }
 
-  /// Get transactions for the current month (for calendar indicators)
-  List<Transaction> _getMonthTransactions(List<Transaction> transactions) {
-    final monthStr = '${_focusedDate.year}-${_focusedDate.month.toString().padLeft(2, '0')}';
-    return transactions
-        .where((t) => t.date.startsWith(monthStr))
-        .toList();
+  List<Transaction> _monthTxs(List<Transaction> txs) {
+    final m = '${_focusedDate.year}-${_focusedDate.month.toString().padLeft(2, '0')}';
+    return txs.where((t) => t.date.startsWith(m)).toList();
   }
 
-  /// Get transaction indicators (dots) for a specific date
-  List<Color> _getIndicatorColors(DateTime date, List<Transaction> monthTransactions) {
-    final dateStr = _getFormattedDate(date);
-    final colors = <Color>[];
-
-    // Check if date has expenses
-    if (monthTransactions.any((t) => t.date == dateStr && t.type == 'expense')) {
-      colors.add(AppTheme.expenseColor);
+  List<Color> _indicators(DateTime day, List<Transaction> monthTxs) {
+    final s = _fmt(day);
+    final out = <Color>[];
+    if (monthTxs.any((t) => t.date == s && t.type == 'expense')) {
+      out.add(AppColors.expense);
     }
-
-    // Check if date has income
-    if (monthTransactions.any((t) => t.date == dateStr && t.type == 'income')) {
-      colors.add(AppTheme.incomeColor);
+    if (monthTxs.any((t) => t.date == s && t.type == 'income')) {
+      out.add(AppColors.income);
     }
-
-    return colors;
+    return out;
   }
 
-  /// Format currency value
-  String _formatCurrency(double value) {
-    return '₩${value.toStringAsFixed(0).replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]},',
-    )}';
-  }
-
-  /// Get category color based on type and category name
-  Color _getCategoryColor(String type, String? category) {
-    if (type == 'expense') {
-      return AppTheme.expenseColor;
-    } else {
-      return AppTheme.incomeColor;
-    }
-  }
-
-  /// Get category emoji/icon representation
-  String _getCategoryEmoji(String? category) {
-    const categoryEmojis = {
-      '식비': '🍽️',
-      '교통': '🚗',
-      '쇼핑': '🛍️',
-      '의료': '⚕️',
-      '문화여가': '🎬',
-      '월세': '🏠',
-      '기타': '📦',
-      '월급': '💰',
-      '부업': '💼',
-      '용돈': '💸',
-    };
-    return categoryEmojis[category] ?? '📌';
-  }
-
-  /// Delete transaction with confirmation
   Future<void> _deleteTransaction(String transactionId) async {
+    final theme = Theme.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -158,64 +99,76 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('삭제', style: TextStyle(color: AppTheme.errorColor)),
+            child: Text(
+              '삭제',
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
           ),
         ],
       ),
     );
 
-    if (confirmed == true) {
-      try {
-        await ref.read(deleteTransactionProvider(transactionId).future);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('거래가 삭제되었습니다.')),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('삭제 실패: ${e.toString()}')),
-          );
-        }
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(deleteTransactionProvider(transactionId).future);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('거래가 삭제되었습니다.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('삭제 실패: $e')),
+        );
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Fetch transactions for the focused month
-    final transactionsAsyncValue = ref.watch(transactionsProvider(null));
+    final txsAsync = ref.watch(transactionsProvider(null));
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('달력'),
-      ),
-      body: transactionsAsyncValue.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(),
-        ),
-        error: (error, stackTrace) => Center(
+      appBar: AppBar(title: const Text('달력')),
+      body: txsAsync.when(
+        loading: () => Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 48, color: AppTheme.errorColor),
-              const SizedBox(height: 16),
-              Text('오류: ${error.toString()}'),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(transactionsProvider),
-                child: const Text('다시 시도'),
+              SkeletonBox(
+                width: double.infinity,
+                height: 320,
+                borderRadius: BorderRadius.circular(AppRadii.card),
               ),
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                children: [
+                  Expanded(child: SkeletonBox(height: 72, borderRadius: BorderRadius.circular(AppRadii.card))),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(child: SkeletonBox(height: 72, borderRadius: BorderRadius.circular(AppRadii.card))),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              const SkeletonCard(),
+              const SizedBox(height: AppSpacing.sm),
+              const SkeletonCard(),
             ],
           ),
         ),
+        error: (error, _) => EmptyState(
+          icon: Icons.error_outline,
+          title: '오류가 발생했습니다',
+          subtitle: error.toString(),
+          actionLabel: '재시도',
+          onAction: () => ref.invalidate(transactionsProvider),
+        ),
         data: (transactions) {
-          final monthTransactions = _getMonthTransactions(transactions);
-          final selectedDateTransactions = transactions
-              .where((t) => t.date == _getFormattedDate(_selectedDate))
-              .toList();
-          final dailyTotals = _getDailyTotals(transactions, _selectedDate);
+          final monthTxs = _monthTxs(transactions);
+          final selectedTxs =
+              transactions.where((t) => t.date == _fmt(_selectedDate)).toList();
+          final totals = _dailyTotals(transactions, _selectedDate);
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -224,428 +177,287 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
             },
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
               child: Column(
-              children: [
-                // Calendar widget
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: TableCalendar<Transaction>(
-                        focusedDay: _focusedDate,
-                        firstDay: DateTime(2020),
-                        lastDay: DateTime(2030),
-                        selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
-                        onDaySelected: (selectedDay, focusedDay) {
-                          setState(() {
-                            _selectedDate = selectedDay;
-                            _focusedDate = focusedDay;
-                          });
-                        },
-                        onPageChanged: (focusedDay) {
-                          setState(() {
-                            _focusedDate = focusedDay;
-                          });
-                        },
-                        calendarStyle: CalendarStyle(
-                          todayDecoration: BoxDecoration(
-                            color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                            shape: BoxShape.circle,
-                          ),
-                          selectedDecoration: const BoxDecoration(
-                            color: AppTheme.primaryColor,
-                            shape: BoxShape.circle,
-                          ),
-                          defaultDecoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                          ),
-                          weekendDecoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                          ),
-                          markerDecoration: const BoxDecoration(
-                            color: AppTheme.primaryColor,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        headerStyle: const HeaderStyle(
-                          formatButtonVisible: false,
-                          titleCentered: true,
-                          titleTextStyle: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        daysOfWeekStyle: const DaysOfWeekStyle(
-                          weekendStyle: TextStyle(color: AppTheme.expenseColor),
-                          weekdayStyle: TextStyle(color: Colors.black87),
-                        ),
-                        calendarBuilders: CalendarBuilders(
-                          defaultBuilder: (context, day, focusedDay) {
-                            final indicators = _getIndicatorColors(day, monthTransactions);
-                            return Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  '${day.day}',
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                                if (indicators.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: indicators
-                                          .asMap()
-                                          .entries
-                                          .map(
-                                            (e) => Container(
-                                              width: 4,
-                                              height: 4,
-                                              margin: const EdgeInsets.symmetric(
-                                                horizontal: 1,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: e.value,
-                                                shape: BoxShape.circle,
-                                              ),
-                                            ),
-                                          )
-                                          .toList(),
-                                    ),
-                                  ),
-                              ],
-                            );
-                          },
-                          selectedBuilder: (context, day, focusedDay) {
-                            final indicators = _getIndicatorColors(day, monthTransactions);
-                            return Container(
-                              width: 40,
-                              height: 40,
-                              decoration: const BoxDecoration(
-                                color: AppTheme.primaryColor,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '${day.day}',
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  if (indicators.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 2),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: indicators
-                                            .asMap()
-                                            .entries
-                                            .map(
-                                              (e) => Container(
-                                                width: 3,
-                                                height: 3,
-                                                margin: const EdgeInsets.symmetric(
-                                                  horizontal: 1,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white.withValues(alpha: 0.8),
-                                                  shape: BoxShape.circle,
-                                                ),
-                                              ),
-                                            )
-                                            .toList(),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            );
-                          },
-                          todayBuilder: (context, day, focusedDay) {
-                            final indicators = _getIndicatorColors(day, monthTransactions);
-                            return Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  '${day.day}',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: AppTheme.primaryColor,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                if (indicators.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: indicators
-                                          .asMap()
-                                          .entries
-                                          .map(
-                                            (e) => Container(
-                                              width: 4,
-                                              height: 4,
-                                              margin: const EdgeInsets.symmetric(
-                                                horizontal: 1,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: e.value,
-                                                shape: BoxShape.circle,
-                                              ),
-                                            ),
-                                          )
-                                          .toList(),
-                                    ),
-                                  ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AnimatedFadeSlide(
+                    child: _buildCalendarCard(monthTxs),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  AnimatedFadeSlide(
+                    delay: const Duration(milliseconds: 100),
+                    child: _buildDailySummary(
+                      expense: totals['expense']!,
+                      income: totals['income']!,
                     ),
                   ),
-                ),
+                  const SizedBox(height: AppSpacing.lg),
 
-                // Daily summary section
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Card(
-                          color: AppTheme.expenseColor.withValues(alpha: 0.1),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  '지출',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppTheme.expenseColor,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _formatCurrency(dailyTotals['expense']!),
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.expenseColor,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Card(
-                          color: AppTheme.incomeColor.withValues(alpha: 0.1),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  '수입',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppTheme.incomeColor,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _formatCurrency(dailyTotals['income']!),
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.incomeColor,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                  AnimatedFadeSlide(
+                    delay: const Duration(milliseconds: 180),
+                    child: _buildListHeader(selectedTxs.length),
                   ),
-                ),
+                  const SizedBox(height: AppSpacing.sm),
 
-                const SizedBox(height: 16),
-
-                // Transaction list header
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '${DateFormat('yyyy년 MM월 dd일').format(_selectedDate)} 거래',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        '${selectedDateTransactions.length}건',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.black54,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                // Transaction list
-                if (selectedDateTransactions.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 32),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.receipt_long_outlined,
-                          size: 48,
-                          color: Colors.grey[300],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          '거래 기록이 없습니다',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: selectedDateTransactions.length,
-                      separatorBuilder: (context, index) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final transaction = selectedDateTransactions[index];
-                        final categoryColor = _getCategoryColor(
-                          transaction.type,
-                          transaction.category,
-                        );
-                        final categoryEmoji = _getCategoryEmoji(transaction.category);
-                        final isExpense = transaction.type == 'expense';
-
-                        return Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Row(
-                              children: [
-                                // Category indicator
-                                Container(
-                                  width: 48,
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    color: categoryColor.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      categoryEmoji,
-                                      style: const TextStyle(fontSize: 24),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-
-                                // Transaction details
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              transaction.category ?? '기타',
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w600,
-                                                color: Colors.black87,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            '${isExpense ? '-' : '+'} ${_formatCurrency(transaction.amount.toDouble())}',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              color: categoryColor,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      if (transaction.memo != null &&
-                                          transaction.memo!.isNotEmpty)
-                                        Text(
-                                          transaction.memo!,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.black54,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                    ],
-                                  ),
-                                ),
-
-                                // Delete button
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline),
-                                  color: AppTheme.errorColor,
-                                  iconSize: 20,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                    minWidth: 40,
-                                    minHeight: 40,
-                                  ),
-                                  onPressed: () {
-                                    _deleteTransaction(transaction.id.toString());
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-
-                const SizedBox(height: 24),
-              ],
+                  if (selectedTxs.isEmpty)
+                    const EmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: '이 날에 거래가 없습니다',
+                      subtitle: '기록 탭에서 새 거래를 추가해 보세요',
+                    )
+                  else
+                    _buildTxList(selectedTxs),
+                ],
+              ),
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ─── Calendar card ───────────────────────────────────────────
+  Widget _buildCalendarCard(List<Transaction> monthTxs) {
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: GlassCard(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: TableCalendar<Transaction>(
+          focusedDay: _focusedDate,
+          firstDay: DateTime(2020),
+          lastDay: DateTime(2030),
+          selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
+          onDaySelected: (selectedDay, focusedDay) => setState(() {
+            _selectedDate = selectedDay;
+            _focusedDate = focusedDay;
+          }),
+          onPageChanged: (focusedDay) =>
+              setState(() => _focusedDate = focusedDay),
+          calendarStyle: CalendarStyle(
+            todayDecoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.25),
+              shape: BoxShape.circle,
+            ),
+            selectedDecoration: BoxDecoration(
+              color: theme.colorScheme.primary,
+              shape: BoxShape.circle,
+            ),
+            defaultTextStyle: TextStyle(color: onSurface),
+            weekendTextStyle: TextStyle(color: AppColors.expense),
+            outsideTextStyle: TextStyle(
+              color: onSurface.withValues(alpha: 0.3),
+            ),
+          ),
+          headerStyle: HeaderStyle(
+            formatButtonVisible: false,
+            titleCentered: true,
+            titleTextStyle: theme.textTheme.titleMedium!.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+            leftChevronIcon:
+                Icon(Icons.chevron_left, color: onSurface),
+            rightChevronIcon:
+                Icon(Icons.chevron_right, color: onSurface),
+          ),
+          daysOfWeekStyle: DaysOfWeekStyle(
+            weekendStyle: const TextStyle(
+              color: AppColors.expense,
+              fontWeight: FontWeight.w600,
+            ),
+            weekdayStyle: TextStyle(
+              color: onSurface.withValues(alpha: 0.7),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          calendarBuilders: CalendarBuilders(
+            defaultBuilder: (context, day, focusedDay) =>
+                _dayCell(day, monthTxs, selected: false, today: false),
+            selectedBuilder: (context, day, focusedDay) =>
+                _dayCell(day, monthTxs, selected: true, today: false),
+            todayBuilder: (context, day, focusedDay) =>
+                _dayCell(day, monthTxs, selected: false, today: true),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dayCell(
+    DateTime day,
+    List<Transaction> monthTxs, {
+    required bool selected,
+    required bool today,
+  }) {
+    final theme = Theme.of(context);
+    final indicators = _indicators(day, monthTxs);
+
+    Color textColor;
+    if (selected) {
+      textColor = Colors.white;
+    } else if (today) {
+      textColor = theme.colorScheme.primary;
+    } else {
+      textColor = theme.colorScheme.onSurface;
+    }
+
+    return Container(
+      decoration: selected
+          ? BoxDecoration(
+              color: theme.colorScheme.primary,
+              shape: BoxShape.circle,
+            )
+          : null,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${day.day}',
+            style: TextStyle(
+              fontSize: 14,
+              color: textColor,
+              fontWeight: (today || selected) ? FontWeight.bold : FontWeight.w400,
+            ),
+          ),
+          if (indicators.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: indicators
+                    .map(
+                      (c) => Container(
+                        width: 4,
+                        height: 4,
+                        margin: const EdgeInsets.symmetric(horizontal: 1),
+                        decoration: BoxDecoration(
+                          color: selected ? Colors.white.withValues(alpha: 0.9) : c,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Daily summary ───────────────────────────────────────────
+  Widget _buildDailySummary({required double expense, required double income}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      child: Row(
+        children: [
+          Expanded(
+            child: _summaryChip(
+              label: '지출',
+              value: _formatCurrency(expense),
+              accent: AppColors.expense,
+              icon: Icons.trending_down,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: _summaryChip(
+              label: '수입',
+              value: _formatCurrency(income),
+              accent: AppColors.income,
+              icon: Icons.trending_up,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryChip({
+    required String label,
+    required String value,
+    required Color accent,
+    required IconData icon,
+  }) {
+    return GlassCard(
+      accentColor: accent,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: accent),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: accent,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: accent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── List header ─────────────────────────────────────────────
+  Widget _buildListHeader(int count) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '${DateFormat('yyyy년 MM월 dd일').format(_selectedDate)} 거래',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Text(
+            '$count건',
+            style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Transaction list ────────────────────────────────────────
+  Widget _buildTxList(List<Transaction> txs) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      child: ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: txs.length,
+        separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+        itemBuilder: (context, index) {
+          final t = txs[index];
+          return AnimatedFadeSlide(
+            delay: Duration(milliseconds: 40 * index),
+            child: TransactionTile(
+              transaction: t,
+              onDelete: () => _deleteTransaction(t.id.toString()),
             ),
           );
         },

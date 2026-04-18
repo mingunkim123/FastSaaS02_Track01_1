@@ -103,6 +103,14 @@ export const knowledgeBase = sqliteTable('knowledge_base', {
     embeddingId: text('embedding_id'),
     createdAt: text('created_at').default(sql`(datetime('now'))`),
 });
+
+// 출시 알림 이메일 수집 (랜딩페이지 공개 엔드포인트)
+// 인증 없이 접근 가능하므로 userId 없음
+export const waitlist = sqliteTable('waitlist', {
+    id:        text('id').primaryKey(),        // crypto.randomUUID()
+    email:     text('email').notNull().unique(),
+    createdAt: text('created_at').default(sql`(datetime('now'))`),
+});
 export interface TransactionSnapshot {
   type: 'income' | 'expense';
   amount: number;

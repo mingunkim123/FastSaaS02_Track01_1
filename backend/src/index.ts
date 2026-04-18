@@ -6,6 +6,7 @@ import usersRoute from './routes/users';
 import aiRouter from './routes/ai';
 import reportsRouter from './routes/reports';
 import sessionsRouter from './routes/sessions';
+import waitlistRouter from './routes/waitlist';
 import { userNotesRoutes } from './routes/user-notes';
 import { userNotesService } from './services/user-notes';
 import { VectorizeService } from './services/vectorize';
@@ -23,7 +24,7 @@ app.get('/', (c) => c.text('Hello! FastSaaS Backend is running!'));
 // localhost:5173는 개발 환경, localhost:3000은 Flutter 웹 개발 환경
 // capacitor://는 모바일 앱, pages.dev는 프로덕션
 // ALLOWED_ORIGINS env var (comma-separated) overrides the defaults when set
-const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://localhost:3000', 'capacitor://localhost', 'https://fastsaas02-track01-1.pages.dev', 'https://fastsaas2.fastsaas2.workers.dev'];
+const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://localhost:4321', 'http://localhost:3000', 'capacitor://localhost', 'https://fastsaas02-track01-1.pages.dev', 'https://fastsaas2.fastsaas2.workers.dev'];
 
 app.use('*', async (c, next) => {
   const envOrigins = c.env.ALLOWED_ORIGINS;
@@ -35,6 +36,9 @@ app.use('*', async (c, next) => {
 
 // 로깅 미들웨어: 모든 요청/응답 기록
 app.use('*', loggingMiddleware);
+
+// 공개 엔드포인트 (authMiddleware 이전에 마운트) — /waitlist는 /api/* 패턴에 매칭되지 않음
+app.route('/waitlist', waitlistRouter);
 
 // /api/* 경로의 모든 요청은 JWT 검증을 거쳐야 함
 // 검증에 실패하면 401 Unauthorized 반환

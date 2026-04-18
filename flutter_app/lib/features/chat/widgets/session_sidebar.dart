@@ -33,68 +33,6 @@ class SessionSidebar extends ConsumerWidget {
     this.isLoading = false,
   });
 
-  void _showSessionMenu(
-    BuildContext context,
-    SessionItem session,
-  ) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.edit),
-              title: const Text('Rename'),
-              onTap: () {
-                Navigator.pop(context);
-                _showRenameDialog(context, session);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete, color: Colors.red),
-              title: const Text('Delete', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                Navigator.pop(context);
-                _showDeleteConfirmation(context, session);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showRenameDialog(BuildContext context, SessionItem session) {
-    final controller = TextEditingController(text: session.title);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Rename Session'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: 'New session name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                // onRenameSession would be called from parent
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Rename'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showDeleteConfirmation(BuildContext context, SessionItem session) {
     showDialog(
       context: context,

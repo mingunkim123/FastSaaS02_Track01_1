@@ -1,0 +1,44 @@
+---
+interface Props {
+  platform: 'android' | 'ios';
+  disabled?: boolean;
+  href?: string;
+}
+
+const { platform, disabled = true, href = '#' } = Astro.props;
+const isAndroid = platform === 'android';
+const sublabel = isAndroid ? 'GET IT ON' : 'Download on the';
+const label = isAndroid ? 'Google Play' : 'App Store';
+---
+
+<a
+  href={disabled ? undefined : href}
+  aria-disabled={disabled}
+  class:list={[
+    'relative inline-flex items-center gap-3 rounded-xl bg-neutral px-5 py-3 text-neutral-content ring-1 ring-white/10 transition shadow-sm',
+    disabled ? 'cursor-not-allowed opacity-80' : 'hover:opacity-90 hover:ring-white/20',
+  ]}
+  role="button"
+  tabindex={disabled ? -1 : 0}
+>
+  {disabled && (
+    <span class="absolute -top-2 -right-2 rounded-full bg-secondary px-2 py-0.5 text-[10px] font-bold text-secondary-content shadow">
+      출시 예정
+    </span>
+  )}
+
+  {isAndroid ? (
+    <svg class="h-7 w-7" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true">
+      <path d="M325.3 234.3L104.6 13l280.8 161.2-60.1 60.1zM51.2 0C38 6.8 29.2 19.6 29.2 36.4v439.2c0 16.8 8.8 29.6 22 36.4l256.5-256L51.2 0zm1.5 512l280.8-161.2-60.1-60.1L52.7 512zM484.8 223.2l-58.4-33.9-66.8 66.7 66.8 66.7 58.4-33.9c16.3-10.9 16.3-34.7 0-45.6z"/>
+    </svg>
+  ) : (
+    <svg class="h-7 w-7" viewBox="0 0 384 512" fill="currentColor" aria-hidden="true">
+      <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zM277.6 84c19.3-22.9 17.5-43.8 17-51.2-17.1 1-36.9 11.7-48.2 24.9-12.4 14.2-19.7 31.8-18.2 51.1 18.5 1.4 35.4-8.1 49.4-24.8z"/>
+    </svg>
+  )}
+
+  <span class="flex flex-col leading-tight text-left">
+    <span class="text-[10px] uppercase tracking-wider opacity-80">{sublabel}</span>
+    <span class="text-base font-semibold">{label}</span>
+  </span>
+</a>

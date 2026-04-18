@@ -1,31 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
+import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_app/core/theme/app_theme.dart';
+import 'package:flutter_app/features/chat/adapters/chat_ui_adapter.dart';
 import 'package:flutter_app/features/chat/widgets/session_sidebar.dart';
 import 'package:flutter_app/features/chat/providers/session_provider.dart';
+import 'package:flutter_app/shared/providers/auth_provider.dart';
 import 'package:flutter_app/shared/providers/chat_provider.dart';
-import 'package:flutter_app/shared/models/chat_message.dart';
+import 'package:flutter_app/shared/widgets/empty_state.dart';
 
 // ============================================================
 // [세션 채팅 화면] chat_screen.dart
-// AI와 세션 기반으로 대화하는 메인 채팅 화면입니다. (하단탭 4번)
-//
-// 레이아웃:
-//   [데스크톱/태블릿] 왼쪽 사이드바(세션 목록) + 오른쪽 채팅 영역
-//   [모바일] 채팅 영역만 표시, 메뉴 버튼으로 세션 목록 바텀시트
-//
-// 채팅 동작:
-//   1) 메시지 입력 → 옵티미스틱 UI (서버 응답 전에 즉시 표시)
-//   2) sendChatMessageProvider로 서버에 전송
-//   3) 서버 응답 후 chatMessagesProvider 새로고침
-//   4) AI 응답에 actionType이 있으면 액션 버튼 표시
-//      (예: 'create' → "기록 보기", 'report' → "리포트 보기")
-//
-// 세션 관리:
-//   - 새 대화 생성: createSessionProvider
-//   - 세션 삭제: deleteSessionProvider
-//   - 활성 세션: activeSessionIdProvider (StateProvider)
+// flutter_chat_ui 기반 AI 세션 채팅.
 // ============================================================
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -35,32 +23,8 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
-  final _messageController = TextEditingController();
-  final _scrollController = ScrollController();
   bool _isSending = false;
-  bool _isInputEmpty = true;
-  final List<ChatMessage> _optimisticMessages = [];
-
-  @override
-  void initState() {
-    super.initState();
-    // Listen to text changes to update button state
-    _messageController.addListener(_updateButtonState);
-  }
-
-  void _updateButtonState() {
-    setState(() {
-      _isInputEmpty = _messageController.text.trim().isEmpty;
-    });
-  }
-
-  @override
-  void dispose() {
-    _messageController.removeListener(_updateButtonState);
-    _messageController.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
+  final List<types.Message> _optimistic = [];
 
   Future<void> _createNewSession() async {
     final result = await showDialog<String>(
@@ -68,18 +32,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       builder: (context) {
         final controller = TextEditingController();
         return AlertDialog(
-          title: const Text('New Conversation'),
+          title: const Text('새 대화 시작'),
           content: TextField(
             controller: controller,
             autofocus: true,
             decoration: const InputDecoration(
-              hintText: 'Enter a title for this conversation',
+              hintText: '대화 제목을 입력하세요',
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: const Text('취소'),
             ),
             TextButton(
               onPressed: () {
@@ -87,7 +51,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   Navigator.pop(context, controller.text);
                 }
               },
-              child: const Text('Create'),
+              child: const Text('생성'),
             ),
           ],
         );
@@ -96,14 +60,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     if (result != null && mounted) {
       try {
-        final sessionId = await ref
-            .read(createSessionProvider(result).future);
+        final sessionId =
+            await ref.read(createSessionProvider(result).future);
         ref.read(activeSessionIdProvider.notifier).state = sessionId;
-        _messageController.clear();
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
+            SnackBar(content: Text('오류: $e')),
           );
         }
       }
@@ -115,87 +78,49 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       await ref.read(deleteSessionProvider(sessionId).future);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Session deleted')),
+          const SnackBar(content: Text('대화가 삭제되었습니다')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('오류: $e')),
         );
       }
     }
   }
 
-  Future<void> _sendMessage(String text) async {
+  Future<void> _handleSend(types.PartialText partial, int sessionId) async {
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+
+    final text = partial.text.trim();
     if (text.isEmpty) return;
 
-    final activeSessionId = ref.read(activeSessionIdProvider);
-
-    if (activeSessionId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select or create a session first')),
-      );
-      return;
-    }
-
-    // Create optimistic user message (show immediately)
-    final userMessage = ChatMessage(
-      id: DateTime.now().millisecondsSinceEpoch,
-      userId: '',
-      role: 'user',
-      content: text,
-      metadata: null,
-      createdAt: DateTime.now().toIso8601String(),
+    final optimistic = ChatUIAdapter.optimisticUserMessage(
+      currentUserId: user.id,
+      text: text,
     );
 
     setState(() {
-      _optimisticMessages.add(userMessage);
+      _optimistic.insert(0, optimistic);
       _isSending = true;
     });
 
-    // Clear input immediately
-    _messageController.clear();
-    _isInputEmpty = true;
-
-    // Scroll to show the loading bubble immediately
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-
     try {
-      await ref.read(
-        sendChatMessageProvider((text, activeSessionId)).future,
-      );
-
-      // Refresh messages from server (will include user message + AI response)
-      ref.refresh(chatMessagesProvider(activeSessionId));
-
-      _optimisticMessages.clear();
-
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
+      await ref.read(sendChatMessageProvider((text, sessionId)).future);
+      // 서버에서 최신 메시지(사용자 + AI) 새로고침됨
+      ref.invalidate(chatMessagesProvider(sessionId));
+      setState(() {
+        _optimistic.remove(optimistic);
       });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('전송 실패: $e')),
         );
-        // Remove optimistic message on error
         setState(() {
-          _optimisticMessages.removeWhere((m) => m.id == userMessage.id);
+          _optimistic.remove(optimistic);
         });
       }
     } finally {
@@ -216,7 +141,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return Scaffold(
       body: Row(
         children: [
-          // Left sidebar with sessions - hide on mobile, responsive on tablet
           if (!isMobile)
             SizedBox(
               width: isTablet ? 250 : 300,
@@ -225,8 +149,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   activeSessionId: activeSessionId,
                   onSessionSelect: (sessionId) {
                     ref.read(activeSessionIdProvider.notifier).state = sessionId;
-                    _messageController.clear();
-                    _isInputEmpty = true;
+                    _optimistic.clear();
                   },
                   onNewSession: _createNewSession,
                   onDeleteSession: _deleteSession,
@@ -241,52 +164,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   sessions: const [],
                   isLoading: true,
                 ),
-                error: (err, stack) => SessionSidebar(
+                error: (err, _) => SessionSidebar(
                   activeSessionId: null,
                   onSessionSelect: (_) {},
                   onNewSession: _createNewSession,
                   onDeleteSession: (_) {},
-                  sessions: [],
+                  sessions: const [],
                   isLoading: false,
                 ),
               ),
             ),
 
-          // Chat area
           Expanded(
             child: activeSessionId == null
-                ? _buildEmptyState()
-                : _buildChatArea(
-                    activeSessionId,
-                    isMobile,
-                    sessionsAsync,
-                  ),
+                ? _buildEmpty()
+                : _buildChatArea(activeSessionId, isMobile, sessionsAsync),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.chat_outlined,
-            size: 64,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          const Text('No conversation selected'),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _createNewSession,
-            icon: const Icon(Icons.add),
-            label: const Text('Start New Conversation'),
-          ),
-        ],
-      ),
+  Widget _buildEmpty() {
+    return EmptyState(
+      icon: Icons.chat_outlined,
+      title: '선택된 대화가 없습니다',
+      subtitle: '새 대화를 시작해 AI와 대화해 보세요',
+      actionLabel: '새 대화 시작',
+      onAction: _createNewSession,
     );
   }
 
@@ -295,293 +200,302 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     bool isMobile,
     AsyncValue<List<SessionItem>> sessionsAsync,
   ) {
+    final theme = Theme.of(context);
+    final user = ref.watch(currentUserProvider);
+    final currentUserId = user?.id ?? 'me';
+
     return Column(
       children: [
-        // Header with session info and mobile menu
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: Colors.grey[300]!),
-            ),
-          ),
-          child: Row(
-            children: [
-              if (isMobile)
-                IconButton(
-                  icon: const Icon(Icons.menu),
-                  onPressed: () {
-                    showModalBottomSheet(
-                      context: context,
-                      builder: (context) => sessionsAsync.when(
-                        data: (sessions) => SessionSidebar(
-                          activeSessionId: activeSessionId,
-                          onSessionSelect: (sessionId) {
-                            ref.read(activeSessionIdProvider.notifier).state =
-                                sessionId;
-                            _messageController.clear();
-                            _isInputEmpty = true;
-                            Navigator.pop(context);
-                          },
-                          onNewSession: () {
-                            Navigator.pop(context);
-                            _createNewSession();
-                          },
-                          onDeleteSession: (sessionId) {
-                            Navigator.pop(context);
-                            _deleteSession(sessionId);
-                          },
-                          sessions: sessions,
-                          isLoading: false,
-                        ),
-                        loading: () => const Padding(
-                          padding: EdgeInsets.all(16),
-                          child: CircularProgressIndicator(),
-                        ),
-                        error: (err, stack) => Center(
-                          child: Text('Error: $err'),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              Expanded(
-                child: Text(
-                  'Chat Session',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Chat messages
+        _buildHeader(isMobile, activeSessionId, sessionsAsync),
         Expanded(
           child: Consumer(
-            builder: (context, ref, child) {
+            builder: (context, ref, _) {
               final messagesAsync =
                   ref.watch(chatMessagesProvider(activeSessionId));
 
               return messagesAsync.when(
-                data: (messages) {
-                  // Combine server messages with optimistic messages
-                  final allMessages = [...messages, ..._optimisticMessages];
+                loading: () =>
+                    const Center(child: CircularProgressIndicator()),
+                error: (err, _) => EmptyState(
+                  icon: Icons.error_outline,
+                  title: '메시지를 불러오지 못했습니다',
+                  subtitle: err.toString(),
+                  actionLabel: '재시도',
+                  onAction: () =>
+                      ref.invalidate(chatMessagesProvider(activeSessionId)),
+                ),
+                data: (serverMessages) {
+                  final uiMessages = [
+                    ..._optimistic,
+                    ...serverMessages.reversed.map(
+                      (m) => ChatUIAdapter.toUiMessage(
+                        m,
+                        currentUserId: currentUserId,
+                      ),
+                    ),
+                  ];
 
-                  return ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: allMessages.length + (_isSending ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      // Show loading bubble while waiting for AI response
-                      if (_isSending && index == allMessages.length) {
-                        return _buildLoadingBubble();
-                      }
-                      final msg = allMessages[index];
-                      return _buildChatBubble(msg);
-                    },
+                  return Chat(
+                    messages: uiMessages,
+                    onSendPressed: (partial) =>
+                        _handleSend(partial, activeSessionId),
+                    user: ChatUIAdapter.currentUser(userId: currentUserId),
+                    showUserAvatars: true,
+                    showUserNames: true,
+                    theme: _buildChatTheme(theme),
+                    l10n: const ChatL10nEn(
+                      inputPlaceholder: '메시지를 입력하세요...',
+                      emptyChatPlaceholder: '첫 메시지를 보내 AI와 대화를 시작하세요',
+                      attachmentButtonAccessibilityLabel: '첨부',
+                      sendButtonAccessibilityLabel: '전송',
+                      unreadMessagesLabel: '읽지 않은 메시지',
+                    ),
+                    typingIndicatorOptions: TypingIndicatorOptions(
+                      typingUsers:
+                          _isSending ? [ChatUIAdapter.aiUser()] : const [],
+                    ),
+                    customMessageBuilder:
+                        (message, {required int messageWidth}) =>
+                            _buildCustomMessage(message, messageWidth),
                   );
                 },
-                loading: () => const Center(
-                  child: CircularProgressIndicator(),
-                ),
-                error: (err, stack) => Center(
-                  child: Text('Error: $err'),
-                ),
               );
             },
-          ),
-        ),
-
-        // Input area
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(color: Colors.grey[300]!),
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _messageController,
-                  decoration: InputDecoration(
-                    hintText: 'Type a message...',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                  ),
-                  maxLines: null,
-                  minLines: 1,
-                  enabled: !_isSending,
-                ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: (_isSending || _isInputEmpty)
-                    ? null
-                    : () => _sendMessage(
-                          _messageController.text.trim(),
-                        ),
-                child: _isSending
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.send),
-              ),
-            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _buildChatBubble(ChatMessage msg) {
-    final isUser = msg.role == 'user';
-    final screenWidth = MediaQuery.of(context).size.width;
-    final maxBubbleWidth = screenWidth * 0.75;
-    final actionType = msg.metadata?['actionType'] as String?;
-
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: isUser ? AppTheme.primaryColor : Colors.grey[200],
-          borderRadius: BorderRadius.circular(12),
+  Widget _buildHeader(
+    bool isMobile,
+    int activeSessionId,
+    AsyncValue<List<SessionItem>> sessionsAsync,
+  ) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          bottom:
+              BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.25)),
         ),
-        child: Column(
-          crossAxisAlignment:
-              isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            Text(
-              msg.content,
-              style: TextStyle(
-                color: isUser ? Colors.white : Colors.black,
-              ),
+      ),
+      child: Row(
+        children: [
+          if (isMobile)
+            IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: () => _showSessionsSheet(activeSessionId, sessionsAsync),
             ),
-            // Show action buttons for AI responses
-            if (!isUser && actionType != null) ...[
-              const SizedBox(height: 8),
-              _buildActionButtons(actionType, msg.metadata),
-            ],
-            const SizedBox(height: 4),
-            Text(
-              msg.createdAt,
-              style: TextStyle(
-                color: isUser ? Colors.white70 : Colors.grey[600],
-                fontSize: 12,
+          const Icon(Icons.smart_toy_outlined, size: 20),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              _currentSessionTitle(activeSessionId, sessionsAsync),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _currentSessionTitle(
+    int activeSessionId,
+    AsyncValue<List<SessionItem>> sessionsAsync,
+  ) {
+    return sessionsAsync.maybeWhen(
+      data: (sessions) {
+        final match = sessions.where((s) => s.id == activeSessionId).toList();
+        if (match.isEmpty) return '대화';
+        return match.first.title;
+      },
+      orElse: () => '대화',
+    );
+  }
+
+  void _showSessionsSheet(
+    int activeSessionId,
+    AsyncValue<List<SessionItem>> sessionsAsync,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => sessionsAsync.when(
+        data: (sessions) => SessionSidebar(
+          activeSessionId: activeSessionId,
+          onSessionSelect: (sessionId) {
+            ref.read(activeSessionIdProvider.notifier).state = sessionId;
+            _optimistic.clear();
+            Navigator.pop(context);
+          },
+          onNewSession: () {
+            Navigator.pop(context);
+            _createNewSession();
+          },
+          onDeleteSession: (sessionId) {
+            Navigator.pop(context);
+            _deleteSession(sessionId);
+          },
+          sessions: sessions,
+          isLoading: false,
+        ),
+        loading: () => const Padding(
+          padding: EdgeInsets.all(AppSpacing.lg),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+        error: (err, _) => Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Text('오류: $err'),
         ),
       ),
     );
   }
 
-  Widget _buildActionButtons(String actionType, Map<String, dynamic>? metadata) {
+  // ─── Custom message builder (액션 메시지) ─────────────────────
+  Widget _buildCustomMessage(types.CustomMessage message, int messageWidth) {
+    final theme = Theme.of(context);
+    final metadata = message.metadata ?? {};
+    final text = (metadata['text'] as String?) ?? '';
+    final actionType = metadata['actionType'] as String?;
+
+    final isUser = message.author.id != ChatUIAdapter.aiUserId;
+    final bubbleColor = isUser
+        ? theme.colorScheme.primary
+        : theme.colorScheme.surfaceContainerHighest;
+    final textColor = isUser
+        ? Colors.white
+        : theme.colorScheme.onSurface;
+
+    return Container(
+      constraints: BoxConstraints(maxWidth: messageWidth.toDouble()),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: bubbleColor,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+      ),
+      child: Column(
+        crossAxisAlignment:
+            isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (text.isNotEmpty)
+            Text(
+              text,
+              style: theme.textTheme.bodyMedium?.copyWith(color: textColor),
+            ),
+          if (actionType != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _buildActionButton(actionType, metadata),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton(String actionType, Map<String, dynamic> metadata) {
     switch (actionType) {
       case 'create':
-        return SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () {
-              // Navigate to record/calendar to see the created transaction
-              context.go('/record');
-            },
-            icon: const Icon(Icons.check_circle, size: 16),
-            label: const Text('View Created', style: TextStyle(fontSize: 12)),
-          ),
+        return _actionBtn(
+          icon: Icons.check_circle_outline,
+          label: '기록 보기',
+          onTap: () => context.go('/record'),
         );
-
       case 'delete':
-        return SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () {
-              context.go('/record');
-            },
-            icon: const Icon(Icons.done, size: 16),
-            label: const Text('View Updated', style: TextStyle(fontSize: 12)),
-          ),
+        return _actionBtn(
+          icon: Icons.done,
+          label: '변경 확인',
+          onTap: () => context.go('/record'),
         );
-
       case 'read':
-        return SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () {
-              // Stay in chat or navigate to calendar
-              context.go('/calendar');
-            },
-            icon: const Icon(Icons.calendar_today, size: 16),
-            label: const Text('View in Calendar', style: TextStyle(fontSize: 12)),
-          ),
+        return _actionBtn(
+          icon: Icons.calendar_today,
+          label: '달력에서 보기',
+          onTap: () => context.go('/calendar'),
         );
-
       case 'report':
-        final report = metadata?['report'];
-        if (report != null && report is Map<String, dynamic>) {
+        final report = metadata['report'];
+        if (report is Map<String, dynamic> && report['id'] != null) {
           final reportId = report['id'];
-          return SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                // Navigate to report detail
-                context.go('/report/$reportId');
-              },
-              icon: const Icon(Icons.bar_chart, size: 16),
-              label: const Text('View Report', style: TextStyle(fontSize: 12)),
-            ),
+          return _actionBtn(
+            icon: Icons.bar_chart,
+            label: '리포트 보기',
+            onTap: () => context.go('/report/$reportId'),
           );
         }
         return const SizedBox.shrink();
-
       default:
         return const SizedBox.shrink();
     }
   }
 
-  Widget _buildLoadingBubble() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final maxBubbleWidth = screenWidth * 0.75;
-
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.grey[200],
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            SizedBox(width: 8),
-            Text(
-              '잠시만 기다려 주세요...',
-              style: TextStyle(color: Colors.black54),
-            ),
-          ],
-        ),
+  Widget _actionBtn({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 16),
+        label: Text(label),
       ),
+    );
+  }
+
+  // ─── Theme 빌더 (라이트/다크) ─────────────────────────────────
+  ChatTheme _buildChatTheme(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+    final sentTextStyle = const TextStyle(
+      color: Colors.white,
+      fontSize: 14,
+      height: 1.4,
+      fontWeight: FontWeight.w500,
+    );
+    final receivedTextStyle = TextStyle(
+      color: theme.colorScheme.onSurface,
+      fontSize: 14,
+      height: 1.4,
+      fontWeight: FontWeight.w500,
+    );
+    final inputBorderRadius = const BorderRadius.all(
+      Radius.circular(AppRadii.md),
+    );
+
+    if (isDark) {
+      return DarkChatTheme(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        primaryColor: theme.colorScheme.primary,
+        secondaryColor: theme.colorScheme.surfaceContainerHighest,
+        inputBackgroundColor: theme.colorScheme.surfaceContainerHighest,
+        inputTextColor: theme.colorScheme.onSurface,
+        inputBorderRadius: inputBorderRadius,
+        messageBorderRadius: AppRadii.md,
+        sentMessageBodyTextStyle: sentTextStyle,
+        receivedMessageBodyTextStyle: receivedTextStyle,
+        inputTextStyle: const TextStyle(fontSize: 14, height: 1.4),
+      );
+    }
+
+    return DefaultChatTheme(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      primaryColor: theme.colorScheme.primary,
+      secondaryColor: theme.colorScheme.surfaceContainerHighest,
+      inputBackgroundColor: theme.colorScheme.primary,
+      inputTextColor: Colors.white,
+      inputBorderRadius: inputBorderRadius,
+      messageBorderRadius: AppRadii.md,
+      sentMessageBodyTextStyle: sentTextStyle,
+      receivedMessageBodyTextStyle: receivedTextStyle,
+      inputTextStyle: const TextStyle(fontSize: 14, height: 1.4),
     );
   }
 }

@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_app/core/theme/app_theme.dart';
+import 'package:flutter_app/shared/widgets/animated_fade_slide.dart';
+import 'package:flutter_app/shared/widgets/empty_state.dart';
+import 'package:flutter_app/shared/widgets/glass_card.dart';
 import '../../shared/models/report.dart';
 import '../../shared/providers/report_provider.dart';
 import '../ai_chat/widgets/report_card.dart';
@@ -9,28 +13,20 @@ import 'widgets/report_name_dialog.dart';
 
 // ============================================================
 // [리포트 상세 화면] report_detail_page.dart
-// AI가 생성한 리포트의 전체 내용을 보여주는 화면입니다.
-// /report/:id 경로로 접근합니다.
-//
-// 두 가지 진입 경로에 따라 하단 버튼이 다름:
-//   1) 채팅에서 생성 직후 → "저장하기" 버튼 (saveReportProvider)
-//   2) 통계 탭에서 저장된 리포트 클릭 → "삭제하기" + "닫기" 버튼
-//
-// 리포트 내용은 reportData 배열의 각 섹션을 순서대로 렌더링:
-//   섹션 type이 pie/bar/line → ReportChart (차트)
-//   그 외 → ReportCard (카드, 알림, 제안)
-//
-// 리포트 제목 클릭 시 이름 변경 가능 (통계 탭에서 진입한 경우만)
+// AI가 생성한 리포트의 전체 내용을 보여주는 화면.
+// 진입 경로:
+//   1) 채팅 직후 → "저장하기"
+//   2) 통계 탭에서 클릭 → "삭제하기" + "닫기"
 // ============================================================
 class ReportDetailPage extends ConsumerStatefulWidget {
   final int reportId;
   final bool isFromStats;
 
   const ReportDetailPage({
-    Key? key,
+    super.key,
     required this.reportId,
     this.isFromStats = false,
-  }) : super(key: key);
+  });
 
   @override
   ConsumerState<ReportDetailPage> createState() => _ReportDetailPageState();
@@ -52,7 +48,10 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
     }
   }
 
-  void _handleSaveReport(ReportDetail report, {String? customTitle}) async {
+  Future<void> _handleSaveReport(
+    ReportDetail report, {
+    String? customTitle,
+  }) async {
     setState(() => _isSaving = true);
 
     try {
@@ -66,24 +65,19 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
 
       await ref.read(saveReportProvider(reportData).future);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('리포트가 저장되었습니다')),
-        );
-        // Use post-frame callback to navigate after build completes
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            context.go('/chat');
-          }
-        });
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('리포트가 저장되었습니다')),
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.go('/chat');
+      });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('저장 실패: $e')),
-        );
-        setState(() => _isSaving = false);
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('저장 실패: $e')),
+      );
+      setState(() => _isSaving = false);
     }
   }
 
@@ -92,14 +86,14 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
       context: context,
       builder: (context) => ReportNameDialog(
         initialName: report.title,
-        onSave: (String newTitle) {
-          _handleSaveReport(report, customTitle: newTitle);
-        },
+        onSave: (String newTitle) =>
+            _handleSaveReport(report, customTitle: newTitle),
       ),
     );
   }
 
-  void _handleDeleteReport() async {
+  Future<void> _handleDeleteReport() async {
+    final theme = Theme.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -112,7 +106,10 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('삭제'),
+            child: Text(
+              '삭제',
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
           ),
         ],
       ),
@@ -125,29 +122,51 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
     try {
       await ref.read(deleteReportProvider(widget.reportId).future);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('리포트가 삭제되었습니다')),
-        );
-        // Use post-frame callback to navigate after build completes
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            context.go('/stats');
-          }
-        });
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('리포트가 삭제되었습니다')),
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.go('/stats');
+      });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('삭제 실패: $e')),
-        );
-        setState(() => _isDeleting = false);
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('삭제 실패: $e')),
+      );
+      setState(() => _isDeleting = false);
     }
+  }
+
+  void _editTitle(ReportDetail report) {
+    showDialog(
+      context: context,
+      builder: (context) => ReportNameDialog(
+        initialName: report.title,
+        title: '리포트 이름 변경',
+        onSave: (newTitle) async {
+          try {
+            await ref.read(
+              updateReportProvider((widget.reportId, newTitle)).future,
+            );
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('리포트 이름이 변경되었습니다')),
+            );
+          } catch (e) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('변경 실패: $e')),
+            );
+          }
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final reportAsync = ref.watch(getReportDetailProvider(widget.reportId));
 
     return Scaffold(
@@ -156,73 +175,19 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
       ),
       body: reportAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('오류: $error'),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref.refresh(getReportDetailProvider(widget.reportId)),
-                child: const Text('재시도'),
-              ),
-            ],
-          ),
+        error: (error, _) => EmptyState(
+          icon: Icons.error_outline,
+          title: '리포트를 불러오지 못했습니다',
+          subtitle: error.toString(),
+          actionLabel: '재시도',
+          onAction: () =>
+              ref.invalidate(getReportDetailProvider(widget.reportId)),
         ),
         data: (report) => CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: widget.isFromStats
-                          ? () {
-                              showDialog(
-                                context: context,
-                                builder: (context) => ReportNameDialog(
-                                  initialName: report.title,
-                                  title: '리포트 이름 변경',
-                                  onSave: (newTitle) async {
-                                    try {
-                                      await ref.read(updateReportProvider((widget.reportId, newTitle)).future);
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('리포트 이름이 변경되었습니다')),
-                                        );
-                                      }
-                                    } catch (e) {
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('변경 실패: $e')),
-                                        );
-                                      }
-                                    }
-                                  },
-                                ),
-                              );
-                            }
-                          : null,
-                      child: Text(
-                        report.title,
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          decoration: widget.isFromStats ? TextDecoration.underline : null,
-                          decorationColor: widget.isFromStats ? Colors.grey : null,
-                        ),
-                      ),
-                    ),
-                    if (report.subtitle != null && report.subtitle!.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          report.subtitle!,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ),
-                  ],
-                ),
+              child: AnimatedFadeSlide(
+                child: _buildHeader(theme, report),
               ),
             ),
             if (report.reportData.isNotEmpty)
@@ -230,59 +195,138 @@ class _ReportDetailPageState extends ConsumerState<ReportDetailPage> {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final section = report.reportData[index];
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: _buildSection(section),
+                    return AnimatedFadeSlide(
+                      delay: Duration(milliseconds: 80 + 60 * index),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.lg,
+                          vertical: AppSpacing.sm,
+                        ),
+                        child: _buildSection(section),
+                      ),
                     );
                   },
                   childCount: report.reportData.length,
                 ),
               ),
-            SliverPadding(
-              padding: const EdgeInsets.all(16),
-              sliver: SliverToBoxAdapter(
-                child: const SizedBox.shrink(),
-              ),
+            const SliverPadding(
+              padding: EdgeInsets.only(bottom: AppSpacing.xxl),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: reportAsync.whenData(
-        (report) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: widget.isFromStats
-                ? Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _isDeleting ? null : _handleDeleteReport,
-                          icon: const Icon(Icons.delete),
-                          label: const Text('삭제하기'),
-                        ),
+      bottomNavigationBar: reportAsync.whenData(_buildBottomBar).value,
+    );
+  }
+
+  Widget _buildHeader(ThemeData theme, ReportDetail report) {
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: GlassCard(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.auto_graph,
+                  color: theme.colorScheme.primary,
+                  size: 22,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: InkWell(
+                    onTap: widget.isFromStats ? () => _editTitle(report) : null,
+                    borderRadius: BorderRadius.circular(AppRadii.sm),
+                    child: Padding(
+                      padding:
+                          const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              report.title,
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          if (widget.isFromStats) ...[
+                            const SizedBox(width: AppSpacing.xs),
+                            Icon(
+                              Icons.edit_outlined,
+                              size: 16,
+                              color: theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.45),
+                            ),
+                          ],
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => context.go('/stats'),
-                          child: const Text('닫기'),
-                        ),
-                      ),
-                    ],
-                  )
-                : ElevatedButton(
-                    onPressed: _isSaving ? null : () => _showSaveDialog(report),
-                    child: _isSaving
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('저장하기'),
+                    ),
                   ),
-          ),
+                ),
+              ],
+            ),
+            if (report.subtitle != null && report.subtitle!.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                report.subtitle!,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ],
         ),
-      ).value,
+      ),
+    );
+  }
+
+  Widget _buildBottomBar(ReportDetail report) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: widget.isFromStats
+            ? Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _isDeleting ? null : _handleDeleteReport,
+                      icon: const Icon(Icons.delete_outline),
+                      label: Text(_isDeleting ? '삭제 중...' : '삭제하기'),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => context.go('/stats'),
+                      child: const Text('닫기'),
+                    ),
+                  ),
+                ],
+              )
+            : SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: _isSaving ? null : () => _showSaveDialog(report),
+                  icon: _isSaving
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(Icons.bookmark_add_outlined),
+                  label: Text(_isSaving ? '저장 중...' : '리포트 저장하기'),
+                ),
+              ),
+      ),
     );
   }
 }

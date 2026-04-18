@@ -1,22 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_app/core/theme/app_theme.dart';
 import 'package:flutter_app/shared/providers/auth_provider.dart';
+import 'package:flutter_app/shared/widgets/animated_fade_slide.dart';
 
 // ============================================================
 // [로그인 화면] login_page.dart
-// 앱 시작 시 인증되지 않은 사용자에게 보여지는 화면입니다.
-//
-// OAuth 로그인 방식:
-//   - Google 로그인: Supabase의 signInWithOAuth로 외부 브라우저 열기
-//     → 로그인 성공 시 딥링크로 앱 복귀 → authState 변경 → /record 이동
-//   - 카카오 로그인: 아직 미구현 (TODO)
-//
-// 주의: signInWithOAuth는 비동기로 세션이 도착하므로
-//       로그인 직후 바로 화면 전환하면 안 됨 → GoRouter redirect가 처리
+// OAuth 로그인 (Google via Supabase).
+// 재설계: 브랜드 히어로 + 그라데이션 + 다크 모드 대응.
 // ============================================================
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -29,7 +23,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _isLoading = false;
   String? _errorMessage;
 
-  /// Handle Google OAuth sign-in
   Future<void> _handleGoogleSignIn() async {
     setState(() {
       _isLoading = true;
@@ -37,279 +30,293 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     });
 
     try {
-      // Use Supabase's native OAuth flow with platform-specific redirect URL
       final authService = ref.read(supabaseAuthProvider);
 
-      // 개발: Chrome(웹)과 모바일 에뮬레이터/기기 구분
-      String redirectUrl;
-      if (kIsWeb) {
-        // 웹 브라우저: localhost 주소 사용
-        redirectUrl = 'http://localhost:5173/auth/callback';
-      } else {
-        // 모바일 앱: 커스텀 스킴 사용
-        redirectUrl = 'com.fastsaas02.app://auth/callback';
-      }
+      final redirectUrl = kIsWeb
+          ? 'http://localhost:5173/auth/callback'
+          : 'com.fastsaas02.app://auth/callback';
 
       await authService.client.auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: redirectUrl,
       );
-
-      // Do NOT navigate here: signInWithOAuth only launches the external
-      // browser/Custom Tab. The actual session arrives asynchronously when
-      // the deep-link callback fires (com.fastsaas02.app://auth/callback),
-      // and the GoRouter `redirect` hook watching authStateProvider will
-      // then push /record automatically. Jumping to /record now produces a
-      // white screen because the session is still null.
+      // signInWithOAuth는 외부 브라우저를 띄우기만 함.
+      // 세션은 딥링크 콜백 후 authStateProvider → GoRouter redirect가 처리.
     } catch (e) {
-      _showErrorSnackBar('Google 로그인 실패: ${e.toString()}');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      _showError('Google 로그인 실패: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  /// Handle Kakao OAuth sign-in
   Future<void> _handleKakaoSignIn() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
-
-    try {
-      // TODO: Implement Kakao OAuth sign-in
-      // Requires: kakao_flutter_sdk or custom implementation
-      // For now, showing a message that this feature is coming soon
-      _showErrorSnackBar('카카오 로그인은 준비 중입니다.');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      _showErrorSnackBar('카카오 로그인 실패: ${e.toString()}');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
+    // TODO: kakao_flutter_sdk 연동 예정
+    _showError('카카오 로그인은 준비 중입니다.');
+    if (mounted) setState(() => _isLoading = false);
   }
 
-  /// Display error message in snackbar
-  void _showErrorSnackBar(String message) {
+  void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: AppTheme.errorColor,
+        backgroundColor: AppColors.expense,
+        behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 4),
       ),
     );
-    if (mounted) {
-      setState(() {
-        _errorMessage = message;
-      });
-    }
+    if (mounted) setState(() => _errorMessage = message);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = MediaQuery.of(context).size.width < 600;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width < 600;
     final horizontalPadding = isMobile ? 24.0 : 48.0;
-    final buttonWidth = isMobile ? double.infinity : 300.0;
+    final contentWidth = isMobile ? double.infinity : 360.0;
 
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      body: Center(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: horizontalPadding,
-              vertical: 24.0,
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // App Title
-                Text(
-                  '가계부',
-                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                    fontSize: 48,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-
-                // Subtitle
-                Text(
-                  'Your Personal Finance Manager',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.black54,
-                    fontSize: 16,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 48),
-
-                // Google OAuth Button
-                SizedBox(
-                  width: buttonWidth,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _handleGoogleSignIn,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black87,
-                      elevation: 1,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                          AppTheme.borderRadiusMedium,
-                        ),
-                        side: const BorderSide(
-                          color: Color(0xFFE5E7EB),
-                          width: 1,
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [
+                    AppColors.darkBackground,
+                    Color.alphaBlend(
+                      theme.colorScheme.primary.withValues(alpha: 0.18),
+                      AppColors.darkBackground,
                     ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                AppTheme.primaryColor,
-                              ),
-                            ),
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // Google Logo (using simple SVG-like representation)
-                              Image.asset(
-                                'assets/images/google_logo.png',
-                                height: 24,
-                                width: 24,
-                                errorBuilder: (context, error, stackTrace) {
-                                  // Fallback: show text-based icon
-                                  return const Icon(
-                                    Icons.account_circle,
-                                    size: 24,
-                                    color: Colors.black54,
-                                  );
-                                },
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Sign in with Google',
-                                style: Theme.of(context).textTheme.bodyLarge
-                                    ?.copyWith(
-                                      color: Colors.black87,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                              ),
-                            ],
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 16),
+                  ]
+                : [
+                    const Color(0xFFF3F6FF),
+                    Color.alphaBlend(
+                      theme.colorScheme.primary.withValues(alpha: 0.10),
+                      Colors.white,
+                    ),
+                  ],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: horizontalPadding,
+                vertical: AppSpacing.xl,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: contentWidth),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedFadeSlide(
+                      child: _buildHero(theme),
+                    ),
+                    const SizedBox(height: AppSpacing.xxl),
 
-                // Kakao OAuth Button
-                SizedBox(
-                  width: buttonWidth,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _handleKakaoSignIn,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFEE500), // Kakao yellow
-                      foregroundColor: const Color(0xFF3C1E1E), // Kakao brown
-                      elevation: 1,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                          AppTheme.borderRadiusMedium,
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
+                    AnimatedFadeSlide(
+                      delay: const Duration(milliseconds: 160),
+                      child: _buildGoogleButton(theme),
                     ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Color(0xFF3C1E1E),
-                              ),
-                            ),
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // Kakao Logo (using simple SVG-like representation)
-                              Image.asset(
-                                'assets/images/kakao_logo.png',
-                                height: 24,
-                                width: 24,
-                                errorBuilder: (context, error, stackTrace) {
-                                  // Fallback: show text-based icon
-                                  return const Icon(
-                                    Icons.account_circle,
-                                    size: 24,
-                                    color: Color(0xFF3C1E1E),
-                                  );
-                                },
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Sign in with Kakao',
-                                style: Theme.of(context).textTheme.bodyLarge
-                                    ?.copyWith(
-                                      color: const Color(0xFF3C1E1E),
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                              ),
-                            ],
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 32),
+                    const SizedBox(height: AppSpacing.md),
 
-                // Error message display
-                if (_errorMessage != null)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.errorColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(
-                        AppTheme.borderRadiusMedium,
-                      ),
-                      border: Border.all(
-                        color: AppTheme.errorColor.withValues(alpha: 0.3),
-                      ),
+                    AnimatedFadeSlide(
+                      delay: const Duration(milliseconds: 240),
+                      child: _buildKakaoButton(),
                     ),
-                    child: Text(
-                      _errorMessage!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.errorColor,
+                    const SizedBox(height: AppSpacing.xl),
+
+                    if (_errorMessage != null)
+                      AnimatedFadeSlide(
+                        child: _buildErrorBanner(theme),
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-              ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildHero(ThemeData theme) {
+    return Column(
+      children: [
+        Container(
+          width: 96,
+          height: 96,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                theme.colorScheme.primary,
+                Color.alphaBlend(
+                  Colors.white.withValues(alpha: 0.25),
+                  theme.colorScheme.primary,
+                ),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: theme.colorScheme.primary.withValues(alpha: 0.35),
+                blurRadius: 24,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.account_balance_wallet_rounded,
+            size: 44,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Text(
+          '민근 가계부',
+          style: theme.textTheme.headlineLarge?.copyWith(
+            fontSize: 36,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          'AI와 대화하며 관리하는 개인 가계부',
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGoogleButton(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _handleGoogleSignIn,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isDark
+              ? theme.colorScheme.surface
+              : Colors.white,
+          foregroundColor: theme.colorScheme.onSurface,
+          elevation: 2,
+          shadowColor: Colors.black.withValues(alpha: 0.08),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadii.md),
+            side: BorderSide(
+              color: theme.colorScheme.outline.withValues(alpha: 0.3),
+            ),
+          ),
+        ),
+        child: _isLoading
+            ? SizedBox(
+                height: 24,
+                width: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const FaIcon(
+                    FontAwesomeIcons.google,
+                    size: 20,
+                    color: Color(0xFFEA4335),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Text(
+                    'Google로 계속하기',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildKakaoButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _handleKakaoSignIn,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFFFEE500),
+          foregroundColor: const Color(0xFF3C1E1E),
+          elevation: 2,
+          shadowColor: const Color(0xFFFEE500).withValues(alpha: 0.4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadii.md),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const FaIcon(
+              FontAwesomeIcons.comment,
+              size: 20,
+              color: Color(0xFF3C1E1E),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            const Text(
+              '카카오로 계속하기',
+              style: TextStyle(
+                color: Color(0xFF3C1E1E),
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.expense.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        border: Border.all(
+          color: AppColors.expense.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.error_outline,
+            color: AppColors.expense,
+            size: 20,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              _errorMessage!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppColors.expense,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,0 +1,72 @@
+---
+// 제품 가치를 시각적으로 보여주는 작은 채팅 목업 (Hero용)
+// 실제 인터랙션 없음 - 순수 HTML + CSS 스틸
+---
+
+<div class="relative mx-auto w-full max-w-[380px]">
+  <!-- 소프트 글로우 -->
+  <div class="absolute -inset-6 rounded-[3rem] bg-gradient-to-br from-primary/20 via-secondary/10 to-transparent blur-2xl" aria-hidden="true"></div>
+
+  <div class="relative rounded-[2rem] border border-base-300 bg-base-100 p-4 shadow-2xl shadow-primary/10">
+    <!-- 상단 바 -->
+    <div class="flex items-center justify-between px-2 py-1 mb-3">
+      <div class="flex items-center gap-2">
+        <div class="h-2 w-2 rounded-full bg-success"></div>
+        <span class="text-xs font-semibold text-base-content/70">AI 가계부</span>
+      </div>
+      <div class="flex gap-1">
+        <div class="h-1 w-1 rounded-full bg-base-content/20"></div>
+        <div class="h-1 w-1 rounded-full bg-base-content/20"></div>
+        <div class="h-1 w-1 rounded-full bg-base-content/20"></div>
+      </div>
+    </div>
+
+    <!-- 대화 스레드 -->
+    <div class="space-y-3">
+      <!-- 유저 버블 -->
+      <div class="flex justify-end reveal" style="animation-delay: 0.2s">
+        <div class="max-w-[75%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-content shadow-sm">
+          어제 점심 12000원 썼어
+        </div>
+      </div>
+
+      <!-- AI 응답 + 카드 -->
+      <div class="flex flex-col items-start gap-2 reveal" style="animation-delay: 0.8s">
+        <div class="max-w-[75%] rounded-2xl rounded-bl-md bg-base-200 px-4 py-2.5 text-sm text-base-content">
+          기록했어요 ✓
+        </div>
+
+        <div class="w-full rounded-xl border border-base-300 bg-base-100 p-3 shadow-sm">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-center gap-2.5">
+              <div class="flex h-9 w-9 items-center justify-center rounded-full bg-secondary/10 text-base">🍱</div>
+              <div>
+                <div class="text-sm font-semibold text-base-content">식비</div>
+                <div class="text-[11px] text-base-content/50">2026.04.17 · 점심</div>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-bold text-base-content tabular-nums">-12,000</div>
+              <div class="text-[10px] text-base-content/50">원</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 타이핑 인디케이터 -->
+      <div class="flex items-center gap-1 px-2 reveal" style="animation-delay: 1.6s">
+        <div class="h-1.5 w-1.5 animate-bounce rounded-full bg-base-content/30" style="animation-delay: 0ms"></div>
+        <div class="h-1.5 w-1.5 animate-bounce rounded-full bg-base-content/30" style="animation-delay: 150ms"></div>
+        <div class="h-1.5 w-1.5 animate-bounce rounded-full bg-base-content/30" style="animation-delay: 300ms"></div>
+      </div>
+    </div>
+
+    <!-- 입력창 목업 -->
+    <div class="mt-4 flex items-center gap-2 rounded-full border border-base-300 bg-base-200/50 px-4 py-2.5">
+      <span class="flex-1 text-sm text-base-content/40 typing-cursor">이번주 커피값 얼마 썼지?</span>
+      <div class="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-content">
+        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </div>
+    </div>
+  </div>
+</div>

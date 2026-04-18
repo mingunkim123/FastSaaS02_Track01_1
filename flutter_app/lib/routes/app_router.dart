@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_app/shared/providers/auth_provider.dart';
+import 'package:flutter_app/shared/providers/onboarding_provider.dart';
 import 'package:flutter_app/shared/widgets/bottom_nav_shell.dart';
 import 'package:flutter_app/features/auth/login_page.dart';
+import 'package:flutter_app/features/onboarding/onboarding_page.dart';
 import 'package:flutter_app/features/record/record_page.dart';
 import 'package:flutter_app/features/calendar/calendar_page.dart';
 import 'package:flutter_app/features/stats/stats_page.dart';
 import 'package:flutter_app/features/ai_chat/ai_chat_page.dart';
 import 'package:flutter_app/features/reports/report_detail_page.dart';
 import 'package:flutter_app/features/chat/screens/chat_screen.dart';
+import 'package:flutter_app/features/settings/settings_page.dart';
 
 // ============================================================
 // [라우터 설정] app_router.dart
@@ -30,27 +33,37 @@ import 'package:flutter_app/features/chat/screens/chat_screen.dart';
 //   - ShellRoute로 하단 네비게이션바를 공유
 // ============================================================
 final goRouterProvider = Provider<GoRouter>((ref) {
-  // 인증 상태를 구독 → 로그인/로그아웃 시 자동으로 redirect 발동
+  // 인증 상태 + 온보딩 완료 여부를 구독
   final authState = ref.watch(authStateProvider);
+  final onboardingState = ref.watch(onboardingCompletedProvider);
 
   return GoRouter(
     initialLocation: '/login',
     debugLogDiagnostics: true,
     redirect: (context, state) {
-      // Check if the auth state is loading
-      if (authState.isLoading) {
-        return null;
+      // 온보딩 상태 로딩 중 → 대기
+      if (onboardingState.isLoading) return null;
+      final onboardingDone = onboardingState.value ?? false;
+
+      // 온보딩 미완료면 /onboarding으로 (단 이미 있으면 그대로)
+      if (!onboardingDone) {
+        return state.matchedLocation == '/onboarding' ? null : '/onboarding';
       }
 
-      // Check authentication state using the stream data
-      final isAuthenticated = authState.whenData((authState) => authState.session != null).value ?? false;
+      // 인증 상태 로딩 중 → 대기
+      if (authState.isLoading) return null;
+      final isAuthenticated =
+          authState.whenData((s) => s.session != null).value ?? false;
 
-      // If not authenticated and not already on login page, redirect to login
+      // 온보딩은 완료됐는데 아직 /onboarding에 있으면 /login으로
+      if (state.matchedLocation == '/onboarding') {
+        return isAuthenticated ? '/record' : '/login';
+      }
+
       if (!isAuthenticated && state.matchedLocation != '/login') {
         return '/login';
       }
 
-      // If authenticated and on login page, redirect to record page
       if (isAuthenticated && state.matchedLocation == '/login') {
         return '/record';
       }
@@ -58,6 +71,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
+      // Onboarding route (no shell)
+      GoRoute(
+        path: '/onboarding',
+        name: 'onboarding',
+        builder: (context, state) => const OnboardingPage(),
+      ),
       // Login route (no shell)
       GoRoute(
         path: '/login',
@@ -123,6 +142,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/chat',
             name: 'chat',
             builder: (context, state) => const ChatScreen(),
+          ),
+
+          // Settings route
+          GoRoute(
+            path: '/settings',
+            name: 'settings',
+            builder: (context, state) => const SettingsPage(),
           ),
         ],
       ),

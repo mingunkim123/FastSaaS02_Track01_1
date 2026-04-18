@@ -5,29 +5,24 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_app/core/theme/app_theme.dart';
 import 'package:flutter_app/shared/providers/transaction_provider.dart';
 import 'package:flutter_app/shared/models/summary_row.dart';
+import 'package:flutter_app/shared/widgets/animated_fade_slide.dart';
+import 'package:flutter_app/shared/widgets/empty_state.dart';
+import 'package:flutter_app/shared/widgets/glass_card.dart';
+import 'package:flutter_app/shared/widgets/section_header.dart';
+import 'package:flutter_app/shared/widgets/skeleton.dart';
 import '../../shared/providers/report_provider.dart';
 import '../reports/report_list_item.dart';
 
 // ============================================================
 // [통계 화면] stats_page.dart
-// 월별 수입/지출 통계와 저장된 리포트를 보여주는 화면입니다. (하단탭 3번)
-//
-// 2개의 탭으로 구성:
-//   [통계 탭]
-//     - 월 네비게이션 (좌/우 화살표로 이전/다음 월 이동)
-//     - 총 지출 / 총 수입 / 순 자산 변화 요약 카드
-//     - 지출 파이차트 + 카테고리별 상세 (금액, 비율, 프로그레스바)
-//     - 수입 파이차트 + 카테고리별 상세
-//   [리포트 탭]
-//     - AI가 생성하여 저장한 리포트 목록 (SavedReportsTab)
-//     - 탭하면 ReportDetailPage로 이동
-//
-// 데이터 흐름:
-//   summaryProvider(monthString) → 월별 카테고리 합계 데이터
-//   getReportsProvider → 저장된 리포트 목록
+// 월별 수입/지출 통계와 저장된 리포트를 보여주는 화면.
+// 2개 탭: [통계] / [리포트]
+// 데이터:
+//   summaryProvider(monthString) — 월별 카테고리별 합계
+//   getReportsProvider          — 저장된 리포트 목록
 // ============================================================
 class StatsPage extends ConsumerStatefulWidget {
-  const StatsPage({Key? key}) : super(key: key);
+  const StatsPage({super.key});
 
   @override
   ConsumerState<StatsPage> createState() => _StatsPageState();
@@ -35,50 +30,41 @@ class StatsPage extends ConsumerStatefulWidget {
 
 class _StatsPageState extends ConsumerState<StatsPage> {
   late DateTime _selectedDate;
+  int? _touchedExpenseIndex;
+  int? _touchedIncomeIndex;
 
   @override
   void initState() {
     super.initState();
     _selectedDate = DateTime.now();
 
-    // Check for month query parameter from AI action button
+    // AI 액션 버튼에서 넘긴 month 쿼리 파라미터 반영
     Future.microtask(() {
+      if (!mounted) return;
       final monthStr = GoRouterState.of(context).uri.queryParameters['month'];
       if (monthStr != null) {
         try {
-          // monthStr is in YYYY-MM format, parse to first day of month
           final parts = monthStr.split('-');
           if (parts.length == 2) {
-            final year = int.parse(parts[0]);
-            final month = int.parse(parts[1]);
-            final date = DateTime(year, month);
             setState(() {
-              _selectedDate = date;
+              _selectedDate = DateTime(int.parse(parts[0]), int.parse(parts[1]));
             });
           }
-        } catch (e) {
-          // Invalid month format, ignore and use current month
+        } catch (_) {
+          // ignore invalid format
         }
       }
     });
   }
 
-  String _formatMonthYear(DateTime date) {
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}';
-  }
-
-  DateTime _previousMonth(DateTime date) {
-    return DateTime(date.year, date.month - 1);
-  }
-
-  DateTime _nextMonth(DateTime date) {
-    return DateTime(date.year, date.month + 1);
-  }
+  String _formatMonthYear(DateTime date) =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
     final monthString = _formatMonthYear(_selectedDate);
     final summaryAsync = ref.watch(summaryProvider(monthString));
+    final theme = Theme.of(context);
 
     return DefaultTabController(
       length: 2,
@@ -86,15 +72,15 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         appBar: AppBar(
           title: const Text('통계'),
           elevation: 0,
-          bottom: const TabBar(
-            labelStyle: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-            unselectedLabelStyle: TextStyle(
-              color: Colors.white70,
-            ),
-            tabs: [
+          bottom: TabBar(
+            labelColor: theme.appBarTheme.foregroundColor,
+            unselectedLabelColor:
+                theme.appBarTheme.foregroundColor?.withValues(alpha: 0.65),
+            indicatorColor: theme.appBarTheme.foregroundColor,
+            indicatorWeight: 3,
+            labelStyle: const TextStyle(fontWeight: FontWeight.w700),
+            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500),
+            tabs: const [
               Tab(text: '통계'),
               Tab(text: '리포트'),
             ],
@@ -102,30 +88,28 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         ),
         body: TabBarView(
           children: [
-            // 통계 tab - existing stats content
             summaryAsync.when(
-              data: (summary) => _buildContent(context, summary, ref, monthString),
-              loading: () => const Center(
-                child: CircularProgressIndicator(),
-              ),
-              error: (error, stackTrace) => Center(
+              data: (summary) =>
+                  _buildContent(context, summary, ref, monthString),
+              loading: () => Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.lg,
+                  vertical: AppSpacing.xl,
+                ),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text('오류가 발생했습니다'),
-                    const SizedBox(height: 8),
-                    Text(
-                      error.toString(),
-                      style: Theme.of(context).textTheme.bodySmall,
-                      textAlign: TextAlign.center,
-                    ),
+                  children: const [
+                    SkeletonCard(),
+                    SizedBox(height: AppSpacing.md),
+                    SkeletonCard(),
+                    SizedBox(height: AppSpacing.md),
+                    SkeletonCard(),
+                    SizedBox(height: AppSpacing.xl),
+                    SkeletonCard(height: 220),
                   ],
                 ),
               ),
+              error: (error, _) => _buildError(context, error),
             ),
-            // 리포트 tab - saved reports
             const SavedReportsTab(),
           ],
         ),
@@ -133,16 +117,33 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     );
   }
 
-  Widget _buildContent(BuildContext context, List<SummaryRow> summary, WidgetRef ref, String monthString) {
-    // Calculate totals
+  // ─── Error view ──────────────────────────────────────────────
+  Widget _buildError(BuildContext context, Object error) {
+    return EmptyState(
+      icon: Icons.error_outline,
+      title: '오류가 발생했습니다',
+      subtitle: error.toString(),
+      actionLabel: '재시도',
+      onAction: () => ref.invalidate(summaryProvider(_formatMonthYear(_selectedDate))),
+    );
+  }
+
+  // ─── Main content ────────────────────────────────────────────
+  Widget _buildContent(
+    BuildContext context,
+    List<SummaryRow> summary,
+    WidgetRef ref,
+    String monthString,
+  ) {
     final expenseSummary = summary.where((s) => s.type == 'expense').toList();
     final incomeSummary = summary.where((s) => s.type == 'income').toList();
 
-    final totalExpense = expenseSummary.fold<num>(0, (sum, s) => sum + s.total);
-    final totalIncome = incomeSummary.fold<num>(0, (sum, s) => sum + s.total);
+    final totalExpense =
+        expenseSummary.fold<num>(0, (sum, s) => sum + s.total);
+    final totalIncome =
+        incomeSummary.fold<num>(0, (sum, s) => sum + s.total);
     final netAmount = totalIncome - totalExpense;
 
-    // Get category colors
     final categoryColors = _getCategoryColors();
 
     return RefreshIndicator(
@@ -152,189 +153,182 @@ class _StatsPageState extends ConsumerState<StatsPage> {
       },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
         child: Column(
-        children: [
-          // Month Navigation
-          _buildMonthNavigation(context),
-          const SizedBox(height: 24),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildMonthNavigation(context),
+            const SizedBox(height: AppSpacing.lg),
 
-          // Summary Cards
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              children: [
-                _buildSummaryCard(
-                  context,
-                  '총 지출',
-                  '${totalExpense.toStringAsFixed(0)}원',
-                  AppTheme.expenseColor,
-                ),
-                const SizedBox(height: 12),
-                _buildSummaryCard(
-                  context,
-                  '총 수입',
-                  '${totalIncome.toStringAsFixed(0)}원',
-                  AppTheme.incomeColor,
-                ),
-                const SizedBox(height: 12),
-                _buildSummaryCard(
-                  context,
-                  '순 자산 변화',
-                  '${netAmount.toStringAsFixed(0)}원',
-                  netAmount >= 0 ? AppTheme.incomeColor : AppTheme.expenseColor,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-
-          // Chart Section
-          if (expenseSummary.isNotEmpty) ...[
+            // Summary cards
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                '지출 내역',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildExpenseChart(expenseSummary, categoryColors),
-            const SizedBox(height: 32),
-          ],
-
-          // Expense Category Breakdown
-          if (expenseSummary.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                '지출 카테고리 상세',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-            ),
-            const SizedBox(height: 12),
-            _buildCategoryBreakdown(expenseSummary, totalExpense, categoryColors),
-            const SizedBox(height: 32),
-          ],
-
-          // Income Chart Section
-          if (incomeSummary.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                '수입 내역',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildIncomeChart(incomeSummary, categoryColors),
-            const SizedBox(height: 32),
-          ],
-
-          // Income Category Breakdown
-          if (incomeSummary.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                '수입 카테고리 상세',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-            ),
-            const SizedBox(height: 12),
-            _buildCategoryBreakdown(incomeSummary, totalIncome, categoryColors),
-            const SizedBox(height: 24),
-          ],
-
-          // Empty state
-          if (expenseSummary.isEmpty && incomeSummary.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(32),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: Column(
                 children: [
-                  Icon(Icons.trending_up, size: 48, color: Colors.grey[400]),
-                  const SizedBox(height: 16),
-                  Text(
-                    '이 달에 거래 내역이 없습니다',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Colors.grey[600],
-                        ),
+                  AnimatedFadeSlide(
+                    delay: const Duration(milliseconds: 0),
+                    child: _buildSummaryCard(
+                      context: context,
+                      label: '총 지출',
+                      amount: totalExpense,
+                      accent: AppColors.expense,
+                      icon: Icons.trending_down,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  AnimatedFadeSlide(
+                    delay: const Duration(milliseconds: 80),
+                    child: _buildSummaryCard(
+                      context: context,
+                      label: '총 수입',
+                      amount: totalIncome,
+                      accent: AppColors.income,
+                      icon: Icons.trending_up,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  AnimatedFadeSlide(
+                    delay: const Duration(milliseconds: 160),
+                    child: _buildSummaryCard(
+                      context: context,
+                      label: '순 자산 변화',
+                      amount: netAmount,
+                      accent: netAmount >= 0
+                          ? AppColors.success
+                          : AppColors.expense,
+                      icon: netAmount >= 0
+                          ? Icons.account_balance_wallet
+                          : Icons.warning_amber,
+                    ),
                   ),
                 ],
               ),
             ),
-        ],
-      ),
+            const SizedBox(height: AppSpacing.xl),
+
+            if (expenseSummary.isNotEmpty) ...[
+              AnimatedFadeSlide(
+                delay: const Duration(milliseconds: 200),
+                child: const SectionHeader(
+                  title: '지출 내역',
+                  leadingIcon: Icons.pie_chart_outline,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              AnimatedFadeSlide(
+                delay: const Duration(milliseconds: 240),
+                child: _buildPieSection(
+                  data: expenseSummary,
+                  colors: categoryColors,
+                  touched: _touchedExpenseIndex,
+                  onTouch: (i) => setState(() => _touchedExpenseIndex = i),
+                  total: totalExpense,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              AnimatedFadeSlide(
+                delay: const Duration(milliseconds: 280),
+                child: const SectionHeader(title: '지출 카테고리 상세'),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              AnimatedFadeSlide(
+                delay: const Duration(milliseconds: 320),
+                child: _buildCategoryBreakdown(
+                  expenseSummary,
+                  totalExpense,
+                  categoryColors,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+            ],
+
+            if (incomeSummary.isNotEmpty) ...[
+              AnimatedFadeSlide(
+                delay: const Duration(milliseconds: 360),
+                child: const SectionHeader(
+                  title: '수입 내역',
+                  leadingIcon: Icons.bar_chart,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              AnimatedFadeSlide(
+                delay: const Duration(milliseconds: 400),
+                child: _buildPieSection(
+                  data: incomeSummary,
+                  colors: categoryColors,
+                  touched: _touchedIncomeIndex,
+                  onTouch: (i) => setState(() => _touchedIncomeIndex = i),
+                  total: totalIncome,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              AnimatedFadeSlide(
+                delay: const Duration(milliseconds: 440),
+                child: const SectionHeader(title: '수입 카테고리 상세'),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              AnimatedFadeSlide(
+                delay: const Duration(milliseconds: 480),
+                child: _buildCategoryBreakdown(
+                  incomeSummary,
+                  totalIncome,
+                  categoryColors,
+                ),
+              ),
+            ],
+
+            if (expenseSummary.isEmpty && incomeSummary.isEmpty)
+              const EmptyState(
+                icon: Icons.trending_up,
+                title: '이 달에 거래 내역이 없습니다',
+                subtitle: '월을 바꾸거나 기록 탭에서 거래를 추가해 보세요',
+              ),
+          ],
         ),
-    );
-  }
-
-  Widget _buildMonthNavigation(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.chevron_left),
-            onPressed: () {
-              setState(() {
-                _selectedDate = _previousMonth(_selectedDate);
-              });
-            },
-          ),
-          Text(
-            '${_selectedDate.year}년 ${_selectedDate.month}월',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            onPressed: () {
-              setState(() {
-                _selectedDate = _nextMonth(_selectedDate);
-              });
-            },
-          ),
-        ],
       ),
     );
   }
 
-  Widget _buildSummaryCard(
-    BuildContext context,
-    String label,
-    String amount,
-    Color color,
-  ) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+  // ─── Month navigation ────────────────────────────────────────
+  Widget _buildMonthNavigation(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(AppRadii.pill),
+          border: Border.all(
+            color: theme.colorScheme.outline.withValues(alpha: 0.3),
+          ),
+        ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[600],
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  amount,
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-              ],
+            IconButton(
+              icon: const Icon(Icons.chevron_left),
+              onPressed: () => setState(
+                () => _selectedDate =
+                    DateTime(_selectedDate.year, _selectedDate.month - 1),
+              ),
             ),
-            Container(
-              width: 4,
-              height: 60,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(2),
+            Expanded(
+              child: Center(
+                child: Text(
+                  '${_selectedDate.year}년 ${_selectedDate.month}월',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.chevron_right),
+              onPressed: () => setState(
+                () => _selectedDate =
+                    DateTime(_selectedDate.year, _selectedDate.month + 1),
               ),
             ),
           ],
@@ -343,48 +337,136 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     );
   }
 
-  Widget _buildExpenseChart(
-    List<SummaryRow> expenseSummary,
-    Map<String, Color> categoryColors,
-  ) {
-    final pieChartData = _buildPieChartData(expenseSummary, categoryColors);
+  // ─── Summary card ────────────────────────────────────────────
+  Widget _buildSummaryCard({
+    required BuildContext context,
+    required String label,
+    required num amount,
+    required Color accent,
+    required IconData icon,
+  }) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
 
-    return SizedBox(
-      height: 300,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: PieChart(
-            PieChartData(
-              sections: pieChartData,
-              centerSpaceRadius: 60,
-              sectionsSpace: 2,
-              startDegreeOffset: -90,
+    return GlassCard(
+      accentColor: accent,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(AppRadii.md),
+            ),
+            child: Icon(icon, color: accent, size: 22),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: theme.textTheme.bodyMedium?.copyWith(color: muted)),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  '${amount.toStringAsFixed(0)}원',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    color: accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildIncomeChart(
-    List<SummaryRow> incomeSummary,
-    Map<String, Color> categoryColors,
-  ) {
-    final pieChartData = _buildPieChartData(incomeSummary, categoryColors);
+  // ─── Pie chart section ───────────────────────────────────────
+  Widget _buildPieSection({
+    required List<SummaryRow> data,
+    required Map<String, Color> colors,
+    required int? touched,
+    required ValueChanged<int?> onTouch,
+    required num total,
+  }) {
+    final theme = Theme.of(context);
 
-    return SizedBox(
-      height: 300,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: PieChart(
-            PieChartData(
-              sections: pieChartData,
-              centerSpaceRadius: 60,
-              sectionsSpace: 2,
-              startDegreeOffset: -90,
-            ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      child: GlassCard(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: SizedBox(
+          height: 260,
+          child: Row(
+            children: [
+              Expanded(
+                child: PieChart(
+                  PieChartData(
+                    sections: _buildPieChartData(data, colors, touched, total),
+                    centerSpaceRadius: 56,
+                    sectionsSpace: 3,
+                    startDegreeOffset: -90,
+                    pieTouchData: PieTouchData(
+                      touchCallback: (event, response) {
+                        if (!event.isInterestedForInteractions ||
+                            response == null ||
+                            response.touchedSection == null) {
+                          onTouch(null);
+                          return;
+                        }
+                        onTouch(response.touchedSection!.touchedSectionIndex);
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: data.take(6).toList().asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final item = entry.value;
+                    final color = colors[item.category] ??
+                        theme.colorScheme.onSurface.withValues(alpha: 0.3);
+                    final isActive = touched == i;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Flexible(
+                            child: Text(
+                              item.category,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontWeight:
+                                    isActive ? FontWeight.w700 : FontWeight.w500,
+                                color: isActive
+                                    ? theme.colorScheme.onSurface
+                                    : theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -394,20 +476,22 @@ class _StatsPageState extends ConsumerState<StatsPage> {
   List<PieChartSectionData> _buildPieChartData(
     List<SummaryRow> data,
     Map<String, Color> categoryColors,
+    int? touched,
+    num total,
   ) {
-    final totalAmount =
-        data.fold<num>(0, (sum, item) => sum + item.total);
-
-    return data.map((item) {
-      final percentage = (item.total / totalAmount * 100).toStringAsFixed(1);
+    return data.asMap().entries.map((entry) {
+      final i = entry.key;
+      final item = entry.value;
+      final isTouched = touched == i;
+      final percentage = (item.total / total * 100).toStringAsFixed(1);
       final color = categoryColors[item.category] ?? Colors.grey;
 
       return PieChartSectionData(
         value: item.total.toDouble(),
         title: '$percentage%',
-        radius: 80,
-        titleStyle: const TextStyle(
-          fontSize: 12,
+        radius: isTouched ? 92 : 78,
+        titleStyle: TextStyle(
+          fontSize: isTouched ? 14 : 12,
           fontWeight: FontWeight.bold,
           color: Colors.white,
         ),
@@ -416,21 +500,25 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     }).toList();
   }
 
+  // ─── Category breakdown ──────────────────────────────────────
   Widget _buildCategoryBreakdown(
     List<SummaryRow> summary,
     num totalAmount,
     Map<String, Color> categoryColors,
   ) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       child: Column(
-        children: List.generate(summary.length, (index) {
-          final item = summary[index];
-          final percentage = (item.total / totalAmount * 100).toStringAsFixed(1);
-          final color = categoryColors[item.category] ?? Colors.grey;
+        children: summary.map((item) {
+          final pct = totalAmount == 0 ? 0.0 : item.total / totalAmount;
+          final color = categoryColors[item.category] ??
+              theme.colorScheme.onSurface.withValues(alpha: 0.3);
 
           return Padding(
-            padding: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.only(bottom: AppSpacing.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -448,73 +536,85 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                               shape: BoxShape.circle,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            item.category,
-                            style: Theme.of(context).textTheme.bodyMedium,
+                          const SizedBox(width: AppSpacing.sm),
+                          Flexible(
+                            child: Text(
+                              item.category,
+                              style: theme.textTheme.bodyMedium,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ],
                       ),
                     ),
                     Text(
                       '${item.total.toStringAsFixed(0)}원',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 Row(
                   children: [
                     Expanded(
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: double.parse(percentage) / 100,
-                          minHeight: 6,
-                          backgroundColor: Colors.grey[200],
-                          valueColor: AlwaysStoppedAnimation<Color>(color),
+                        borderRadius: BorderRadius.circular(AppRadii.sm),
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0, end: pct),
+                          duration: const Duration(milliseconds: 700),
+                          curve: Curves.easeOutCubic,
+                          builder: (context, value, _) {
+                            return LinearProgressIndicator(
+                              value: value,
+                              minHeight: 6,
+                              backgroundColor:
+                                  theme.colorScheme.surfaceContainerHighest,
+                              valueColor: AlwaysStoppedAnimation<Color>(color),
+                            );
+                          },
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppSpacing.sm),
                     Text(
-                      '$percentage%',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.grey[600],
-                          ),
+                      '${(pct * 100).toStringAsFixed(1)}%',
+                      style: theme.textTheme.bodySmall?.copyWith(color: muted),
                     ),
                   ],
                 ),
               ],
             ),
           );
-        }),
+        }).toList(),
       ),
     );
   }
 
   Map<String, Color> _getCategoryColors() {
-    return {
+    return const {
       // Expense categories
-      '식비': const Color(0xFFFF6B6B),
-      '교통': const Color(0xFF4ECDC4),
-      '쇼핑': const Color(0xFFFFE66D),
-      '의료': const Color(0xFF95E1D3),
-      '문화여가': const Color(0xFFA8D8EA),
-      '월세': const Color(0xFFFF8B94),
-      '기타': const Color(0xFFCCCCCC),
+      '식비': Color(0xFFFF6B6B),
+      '교통': Color(0xFF4ECDC4),
+      '쇼핑': Color(0xFFFFE66D),
+      '의료': Color(0xFF95E1D3),
+      '문화여가': Color(0xFFA8D8EA),
+      '월세': Color(0xFFFF8B94),
+      '기타': Color(0xFFCCCCCC),
       // Income categories
-      '월급': const Color(0xFF3B82F6),
-      '부업': const Color(0xFF10B981),
-      '용돈': const Color(0xFF8B5CF6),
+      '월급': Color(0xFF3B82F6),
+      '부업': Color(0xFF10B981),
+      '용돈': Color(0xFF8B5CF6),
     };
   }
 }
 
+// ============================================================
+// [저장된 리포트 탭] SavedReportsTab
+// ============================================================
 class SavedReportsTab extends ConsumerWidget {
-  const SavedReportsTab({Key? key}) : super(key: key);
+  const SavedReportsTab({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -523,53 +623,34 @@ class SavedReportsTab extends ConsumerWidget {
     ));
 
     return reportsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stack) => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('오류: $error'),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => ref.refresh(getReportsProvider(
-                (month: null, limit: 50),
-              )),
-              child: const Text('재시도'),
-            ),
-          ],
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+        child: SkeletonList(count: 4),
+      ),
+      error: (error, _) => EmptyState(
+        icon: Icons.error_outline,
+        title: '리포트 목록을 불러오지 못했습니다',
+        subtitle: error.toString(),
+        actionLabel: '재시도',
+        onAction: () => ref.invalidate(
+          getReportsProvider((month: null, limit: 50)),
         ),
       ),
       data: (reports) {
         if (reports.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.bookmark_outline,
-                  size: 64,
-                  color: Theme.of(context).disabledColor,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '저장된 리포트가 없습니다',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Chat에서 리포트를 생성하고 저장해보세요',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
+          return const EmptyState(
+            icon: Icons.bookmark_outline,
+            title: '저장된 리포트가 없습니다',
+            subtitle: 'Chat에서 리포트를 생성하고 저장해 보세요',
           );
         }
 
         return ListView.builder(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
           itemCount: reports.length,
-          itemBuilder: (context, index) => ReportListItem(
-            report: reports[index],
+          itemBuilder: (context, index) => AnimatedFadeSlide(
+            delay: Duration(milliseconds: 40 * index),
+            child: ReportListItem(report: reports[index]),
           ),
         );
       },
