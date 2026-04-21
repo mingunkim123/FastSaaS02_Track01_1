@@ -351,7 +351,81 @@ graph TD
 
 ---
 
-## 10. 기술 스택 요약
+## 10. 세션(Session)의 보안적 역할
+
+세션은 단순한 "대화 그룹핑" 기능이 아닙니다. 아래와 같이 인증·인가·무결성의 핵심 경계선으로 동작합니다.
+
+### 10.1 세션이 없을 때 발생하는 보안 공백
+
+```mermaid
+sequenceDiagram
+    actor Attacker
+    participant Workers as Cloudflare Workers
+    participant Turso
+
+    Note over Attacker,Turso: ❌ 세션 소유권 검증이 없는 경우
+    Attacker->>Workers: POST /api/sessions/999/messages<br/>(JWT는 본인 토큰, sessionId만 조작)
+    Workers->>Workers: JWT 검증 통과 (본인 토큰이므로)
+    Workers->>Turso: chatMessages WHERE sessionId = 999 조회
+    Turso-->>Workers: 다른 사용자의 대화 내역 반환 ⚠️
+    Workers-->>Attacker: 타인의 금융 데이터 노출
+```
+
+JWT가 유효하더라도, `sessionId`는 URL 파라미터로 공격자가 임의 조작 가능합니다. 세션 소유권 검증(`getSession(db, sessionId, userId)`)이 없으면 **Insecure Direct Object Reference(IDOR)** 취약점이 됩니다.
+
+### 10.2 실제 방어 흐름
+
+```mermaid
+sequenceDiagram
+    actor Attacker
+    participant Workers as Cloudflare Workers
+    participant SessionSvc as sessions.ts (service)
+    participant Turso
+
+    Note over Attacker,Turso: ✅ 현재 구현 — 세션 소유권 이중 검증
+    Attacker->>Workers: POST /api/sessions/999/messages<br/>(본인 JWT, 타인 sessionId)
+    Workers->>Workers: JWT 검증 → userId = "attacker-id" 추출
+    Workers->>SessionSvc: getSession(db, 999, "attacker-id")
+    SessionSvc->>Turso: SELECT WHERE id=999 AND userId="attacker-id"
+    Turso-->>SessionSvc: 결과 없음 (소유자 불일치)
+    SessionSvc-->>Workers: null 반환
+    Workers-->>Attacker: 404 Not Found<br/>(세션 존재 여부조차 노출 안 함)
+```
+
+`404`를 반환하는 이유: `403 Forbidden`은 세션이 존재하지만 권한이 없음을 암시하여, 공격자가 유효한 세션 ID를 열거(enumeration)하는 데 활용될 수 있기 때문입니다.
+
+### 10.3 세션이 보호하는 세 가지 기능
+
+| 기능 | 세션 없이는? | 세션이 있으면? |
+|------|------------|--------------|
+| **메시지 조회** | `userId`만으로 전체 메시지 노출 가능 | `sessionId + userId` 이중 키로 최소 권한 접근 |
+| **undo** | "어느 대화의 최근 액션인지" 특정 불가 → 타인 데이터 rollback 위험 | 세션 범위 내 최근 AI 메시지만 역추적, 범위 이탈 불가 |
+| **clarification 상태** | 진행 중인 입력 상태를 사용자 전역으로 관리 → 세션 간 오염 | `chatSessionId`로 격리, 다른 세션의 미완료 입력이 간섭 불가 |
+
+### 10.4 코드 레벨 보안 불변식
+
+```typescript
+// routes/sessions.ts — 모든 쓰기 작업 전 반드시 실행
+const session = await getSession(db, sessionId, userId); // userId는 JWT에서만 추출
+if (!session) {
+  return c.json({ success: false, error: 'Session not found' }, 404);
+  // 403이 아닌 404: 세션 존재 여부 자체를 노출하지 않음 (정보 최소 노출 원칙)
+}
+
+// services/sessions.ts — AND 조건으로 소유권 강제
+SELECT * FROM sessions WHERE id = ? AND userId = ?
+//                                    ^^^^^^^^^^^^^^
+//                                    이 조건이 빠지면 IDOR 취약점
+```
+
+**깨지면 안 되는 규칙:**
+- `userId`는 반드시 `c.get('userId')`에서만 추출 — request body나 URL params 금지
+- 세션 조회 시 `sessionId`와 `userId` 두 조건 모두 필수 — 하나라도 생략하면 IDOR
+- 쓰기(INSERT/UPDATE/DELETE) 전 반드시 `getSession()` 선행 — 순서 변경 금지
+
+---
+
+## 11. 기술 스택 요약
 
 | 영역 | 기술 |
 |------|------|
