@@ -6,7 +6,13 @@
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "test": "vitest run",
-    "type-check": "tsc --noEmit"
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:e2e": "vitest run --project e2e",
+    "test:coverage": "vitest run --coverage",
+    "type-check": "tsc --noEmit",
+    "seed": "npx tsx src/db/seeds/index.ts",
+    "test:llm": "cross-env RUN_LLM_TESTS=1 vitest run --config vitest.llm.config.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.2",
@@ -16,6 +22,8 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.4",
+    "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.10",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2",

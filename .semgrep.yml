@@ -1,0 +1,94 @@
+rules:
+
+  # Security: hardcoded API key
+  - id: hardcoded-api-key
+    patterns:
+      - pattern-regex: '(?i)(api_key|apikey|api-key|secret_key|auth_token|access_token)\s*[:=]\s*["''][A-Za-z0-9_\-\.]{16,}["'']'
+    message: "Hardcoded API key or secret detected. Use environment variables (c.env.VARIABLE_NAME) instead."
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: CWE-798
+
+  # Security: hardcoded JWT secret
+  - id: hardcoded-jwt-secret
+    pattern-regex: '(?i)(jwt_secret|supabase_jwt|signing_secret)\s*[:=]\s*["''][A-Za-z0-9+/=_\-]{20,}["'']'
+    message: "Hardcoded JWT secret detected. Use Cloudflare Workers secrets or .dev.vars instead."
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: CWE-321
+
+  # Security: SQL injection via string concat
+  - id: sql-injection-string-concat
+    patterns:
+      - pattern: $DB.run($QUERY + $INPUT)
+      - pattern: $DB.execute($QUERY + $INPUT)
+    message: "SQL query built with string concatenation. Use Drizzle ORM parameterized queries (eq(), and()) instead."
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: CWE-89
+
+  # Security: eval usage
+  - id: eval-usage
+    pattern: eval(...)
+    message: "eval() detected. This can lead to code injection vulnerabilities."
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: CWE-95
+
+  # Security: userId read from request body
+  - id: userid-from-request-body
+    patterns:
+      - pattern: |
+          const { userId, ... } = await $C.req.json()
+      - pattern: |
+          const $BODY = await $C.req.json();
+          ...
+          $BODY.userId
+    message: "userId read from request body is a security risk. Always use c.get('userId') from the auth middleware."
+    languages: [typescript, javascript]
+    severity: ERROR
+    paths:
+      include:
+        - "backend/src/routes/**"
+        - "backend/src/services/**"
+    metadata:
+      category: security
+      cwe: CWE-639
+
+  # Security: userId destructured from req.json
+  - id: direct-req-json-for-userid
+    pattern: |
+      const { $A, userId: $UID, $B } = await c.req.json()
+    message: "userId destructured from c.req.json(). Use c.get('userId') instead."
+    languages: [typescript, javascript]
+    severity: ERROR
+    paths:
+      include:
+        - "backend/src/routes/**"
+    metadata:
+      category: security
+      cwe: CWE-639
+
+  # Type safety: any type in security files
+  - id: any-type-in-security-files
+    patterns:
+      - pattern-regex: ':\s*any\b'
+      - pattern-regex: '\bas\s+any\b'
+    message: "Usage of 'any' type in security-critical file. Use specific types or 'unknown' instead."
+    languages: [typescript]
+    severity: WARNING
+    paths:
+      include:
+        - "backend/src/middleware/**"
+        - "backend/src/services/validation.ts"
+        - "backend/src/routes/**"
+    metadata:
+      category: type-safety

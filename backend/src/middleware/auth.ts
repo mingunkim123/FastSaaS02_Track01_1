@@ -44,13 +44,11 @@ async function getJWKS(supabaseUrl: string): Promise<{ keys: JWKSKey[] } | null>
   const now = Date.now();
   // JWKS는 자주 변하지 않으므로 1시간 캐싱해서 불필요한 네트워크 요청 방지
   if (jwksCache && now - jWKSCacheTime < 3600000) {
-    console.log('[JWKS] Using cached JWKS');
     return jwksCache;
   }
 
   try {
     const url = `${supabaseUrl}/auth/v1/.well-known/jwks.json`;
-    console.log('[JWKS] Fetching from:', url);
     const res = await fetch(url);
     if (!res.ok) {
       console.error('[JWKS] Fetch failed with status:', res.status);
@@ -63,7 +61,6 @@ async function getJWKS(supabaseUrl: string): Promise<{ keys: JWKSKey[] } | null>
     }
     jwksCache = data;
     jWKSCacheTime = now;
-    console.log('[JWKS] Fetched successfully, keys:', jwksCache.keys.length);
     return jwksCache;
   } catch (err) {
     console.error('[JWKS] Fetch exception:', err);
@@ -88,7 +85,7 @@ async function verifyES256(
     // ES256은 Elliptic Curve Digital Signature Algorithm (타원곡선 암호)
     // kid(key id)는 Supabase의 어떤 공개키로 서명했는지 가리킴
     if (header.alg !== 'ES256' || !header.kid) {
-      console.error('[ES256] Invalid header:', { alg: header.alg, kid: header.kid });
+      console.error('[ES256] Invalid header algorithm or missing kid');
       return null;
     }
 
@@ -102,16 +99,13 @@ async function verifyES256(
     // kid와 일치하는 공개키 찾기 (kid = key id, 고유 식별자)
     const key = jwks.keys.find(k => k.kid === header.kid);
     if (!key) {
-      console.error('[ES256] Key not found for kid:', header.kid);
-      console.error('[ES256] Available kids:', jwks.keys.map(k => k.kid));
+      console.error('[ES256] Key not found for kid (check JWKS endpoint)');
       return null;
     }
     if (key.alg !== 'ES256') {
-      console.error('[ES256] Key algorithm mismatch:', key.alg);
+      console.error('[ES256] Key algorithm mismatch');
       return null;
     }
-
-    console.log('[ES256] Found matching key');
 
     // ES256(P-256 타원곡선)의 공개키는 x, y 좌표로 구성
     // 0x04는 압축되지 않은 포인트 형식의 프리픽스
@@ -125,8 +119,6 @@ async function verifyES256(
       false,
       ['verify']
     );
-
-    console.log('[ES256] Public key imported');
 
     // JWT 서명 검증: header.payload가 정말 Supabase의 개인키로 서명되었는지 확인
     // 타원곡선 암호는 공개키로 서명을 검증할 수 있음
@@ -145,8 +137,6 @@ async function verifyES256(
       return null;
     }
 
-    console.log('[ES256] Signature verified');
-
     // JWT 페이로드 디코딩 및 검증
     const payloadJson = decodeBase64Url(payloadB64);
     const payload = JSON.parse(payloadJson);
@@ -157,7 +147,6 @@ async function verifyES256(
       return null;
     }
 
-    console.log('[ES256] Payload verified, returning');
     return payload;
   } catch (err) {
     console.error('[ES256] Exception:', err);
@@ -213,29 +202,18 @@ export async function verifyJWT(
     // 서명된 데이터를 검증하려면 알고리즘에 맞는 방식으로 검증해야 함
     const headerJson = decodeBase64Url(parts[0]);
     const header: JWTHeader = JSON.parse(headerJson);
-    console.log('[JWT] Header:', { alg: header.alg, kid: header.kid });
 
     // ES256 먼저 시도 (Supabase의 최신 인증 방식, 보안 강화)
     // 모던 Supabase는 대부분 ES256 사용
     if (header.alg === 'ES256' && supabaseUrl) {
-      console.log('[JWT] Attempting ES256 verification');
       const payload = await verifyES256(token, supabaseUrl);
-      if (payload) {
-        console.log('[JWT] ES256 verification succeeded');
-        return payload;
-      }
-      console.log('[JWT] ES256 verification failed');
+      if (payload) return payload;
     }
 
     // ES256 실패 시 HS256으로 폴백 (이전 버전 또는 레거시 시스템용)
     if (header.alg === 'HS256') {
-      console.log('[JWT] Attempting HS256 verification');
       const payload = await verifyHS256(token, secret);
-      if (payload) {
-        console.log('[JWT] HS256 verification succeeded');
-        return payload;
-      }
-      console.log('[JWT] HS256 verification failed');
+      if (payload) return payload;
     }
 
     console.error('[JWT] No matching algorithm handler');
@@ -254,9 +232,20 @@ export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: Varia
     if (!authHeader?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401);
     const token = authHeader.slice(7);
 
+    // DEV 환경에서 테스트용 admin 계정 우회
+    const isDev = c.env.ENVIRONMENT === 'development' || !c.env.ENVIRONMENT;
+    const testAdminToken = 'e2e-test-admin-token';
+
+    if (isDev && token === testAdminToken) {
+      console.log('[AUTH] Dev mode: E2E test admin account authenticated');
+      c.set('userId', 'e2e-test-admin');
+      await next();
+      return;
+    }
+
     // Supabase 인스턴스의 공개키 정보를 가져오는 URL
     // ES256 검증을 위해 필요함
-    const supabaseUrl = 'https://uqvnepemplsdkkawbmdc.supabase.co';
+    const supabaseUrl = c.env.SUPABASE_URL;
 
     // JWT 토큰 검증 - 유효하면 sub(사용자 ID) 필드 반환
     const payload = await verifyJWT(token, c.env.SUPABASE_JWT_SECRET, supabaseUrl);

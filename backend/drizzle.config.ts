@@ -10,7 +10,6 @@ try {
     });
 } catch { }
 
-
 export default defineConfig({
     dialect: 'turso', // libSQL 방언
     schema: './src/db/schema.ts', // 스키마 파일 위치
