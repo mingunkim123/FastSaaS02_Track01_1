@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:flutter_app/core/theme/app_theme.dart';
@@ -33,15 +34,36 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     });
 
     try {
-      final authService = ref.read(supabaseAuthProvider);
-      final redirectUrl = kIsWeb
-          ? 'http://localhost:5173/auth/callback'
-          : 'com.fastsaas02.app://auth/callback';
+      if (kIsWeb) {
+        // 웹: 브라우저 리다이렉트 방식
+        await Supabase.instance.client.auth.signInWithOAuth(
+          OAuthProvider.google,
+          redirectTo: 'http://localhost:5173/auth/callback',
+        );
+      } else {
+        // Android/iOS: 네이티브 Google 로그인 팝업
+        const webClientId = 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
+        const androidClientId = 'YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com';
 
-      await authService.client.auth.signInWithOAuth(
-        OAuthProvider.google,
-        redirectTo: redirectUrl,
-      );
+        final googleSignIn = GoogleSignIn(
+          clientId: androidClientId,
+          serverClientId: webClientId,
+        );
+
+        final googleUser = await googleSignIn.signIn();
+        if (googleUser == null) {
+          if (mounted) setState(() => _isLoading = false);
+          return;
+        }
+
+        final googleAuth = await googleUser.authentication;
+
+        await Supabase.instance.client.auth.signInWithIdToken(
+          provider: OAuthProvider.google,
+          idToken: googleAuth.idToken!,
+          accessToken: googleAuth.accessToken,
+        );
+      }
     } catch (e) {
       _showError('Google 로그인 실패: $e');
       if (mounted) setState(() => _isLoading = false);
