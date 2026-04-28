@@ -119,6 +119,7 @@ class SupabaseAuthService {
   Future<AuthResponse> refreshSession() async {
     try {
       final response = await client.auth.refreshSession();
+      _syncToNativePrefs(response.session);
       return response;
     } catch (e) {
       print('Error refreshing session: $e');

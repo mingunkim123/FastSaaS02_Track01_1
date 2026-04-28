@@ -47,6 +47,7 @@ class LoggingInterceptor extends Interceptor {
 /// Handles 401 errors with automatic token refresh and request retry
 class AuthInterceptor extends Interceptor {
   final Ref ref;
+  final Dio retryDio;
   final Future<String?> Function() getToken;
   final Future<void> Function() refreshToken;
   final Future<void> Function()? onRefreshFailed;
@@ -56,6 +57,7 @@ class AuthInterceptor extends Interceptor {
 
   AuthInterceptor({
     required this.ref,
+    required this.retryDio,
     required this.getToken,
     required this.refreshToken,
     this.onRefreshFailed,
@@ -104,7 +106,7 @@ class AuthInterceptor extends Interceptor {
           final opts = err.requestOptions;
           opts.headers['Authorization'] = 'Bearer $newToken';
           try {
-            final response = await ref.read(dioProvider).fetch(opts);
+            final response = await retryDio.fetch(opts);
             handler.resolve(response);
             return;
           } catch (e) {
@@ -137,7 +139,7 @@ class AuthInterceptor extends Interceptor {
         final opts = err.requestOptions;
         opts.headers['Authorization'] = 'Bearer $newToken';
         try {
-          final response = await ref.read(dioProvider).fetch(opts);
+          final response = await retryDio.fetch(opts);
           handler.resolve(response);
           return;
         } catch (e) {
@@ -167,9 +169,3 @@ class AuthInterceptor extends Interceptor {
 
   Logger _getLogger() => Logger();
 }
-
-// Placeholder for dioProvider (will be injected from api_provider.dart)
-// This is used for retrying requests after token refresh
-final dioProvider = Provider<Dio>((ref) {
-  throw UnimplementedError('dioProvider must be overridden in api_provider.dart');
-});

@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -7,6 +8,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:flutter_app/core/constants/app_constants.dart';
 import 'package:flutter_app/core/theme/app_theme.dart';
 import 'package:flutter_app/shared/providers/auth_provider.dart';
 
@@ -42,8 +44,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         );
       } else {
         // Android/iOS: 네이티브 Google 로그인 팝업
-        const webClientId = 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
-        const androidClientId = 'YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com';
+        const webClientId = '1048336469695-9op0cg41p2n3rkka4nvc60kskc34ht00.apps.googleusercontent.com';
+        const androidClientId = '1048336469695-2nld4aa1adnft7s7fpi8f343i093nq6d.apps.googleusercontent.com';
 
         final googleSignIn = GoogleSignIn(
           clientId: androidClientId,
@@ -58,11 +60,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
         final googleAuth = await googleUser.authentication;
 
-        await Supabase.instance.client.auth.signInWithIdToken(
+        final session = await Supabase.instance.client.auth.signInWithIdToken(
           provider: OAuthProvider.google,
           idToken: googleAuth.idToken!,
           accessToken: googleAuth.accessToken,
         );
+
+        // users 테이블에 유저 등록/동기화
+        final user = session.user;
+        if (user != null) {
+          final token = session.session?.accessToken;
+          final dio = Dio(BaseOptions(baseUrl: AppConstants.apiBaseUrl));
+          await dio.post(
+            '/users/sync',
+            data: {
+              'email': user.email,
+              'name': user.userMetadata?['full_name'] ?? user.userMetadata?['name'],
+              'avatar_url': user.userMetadata?['avatar_url'],
+              'provider': 'google',
+            },
+            options: Options(headers: {'Authorization': 'Bearer $token'}),
+          );
+        }
       }
     } catch (e) {
       _showError('Google 로그인 실패: $e');

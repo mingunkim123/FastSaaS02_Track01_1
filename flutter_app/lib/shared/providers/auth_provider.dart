@@ -35,28 +35,37 @@ final authStateProvider = StreamProvider<AuthState>((ref) {
 /// Returns the currently authenticated user or null if not signed in
 final currentUserProvider = Provider<User?>((ref) {
   final authService = ref.watch(supabaseAuthProvider);
-  return authService.currentUser;
+  final authState = ref.watch(authStateProvider);
+  final session = authState.maybeWhen(
+    data: (state) => state.session,
+    orElse: () => authService.currentSession,
+  );
+  return session?.user ?? authService.currentUser;
 });
 
 /// Provider for the current session
 /// Returns the current authentication session or null if not authenticated
 final currentSessionProvider = Provider<Session?>((ref) {
   final authService = ref.watch(supabaseAuthProvider);
-  return authService.currentSession;
+  final authState = ref.watch(authStateProvider);
+  return authState.maybeWhen(
+    data: (state) => state.session,
+    orElse: () => authService.currentSession,
+  );
 });
 
 /// Provider for the current user's access token
 /// Returns the JWT token string or null if not authenticated
 final accessTokenProvider = Provider<String?>((ref) {
-  final authService = ref.watch(supabaseAuthProvider);
-  return authService.accessToken;
+  final session = ref.watch(currentSessionProvider);
+  return session?.accessToken;
 });
 
 /// Provider to check authentication status
 /// Returns true if user is authenticated, false otherwise
 final isAuthenticatedProvider = Provider<bool>((ref) {
-  final authService = ref.watch(supabaseAuthProvider);
-  return authService.isAuthenticated;
+  final session = ref.watch(currentSessionProvider);
+  return session != null;
 });
 
 /// Family provider for signing in with email and password
