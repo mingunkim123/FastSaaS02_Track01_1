@@ -28,7 +28,7 @@ import { createRateLimiter } from '../middleware/rateLimit';
 import { chatMessages, transactions, reports, type TransactionSnapshot } from '../db/schema';
 import { eq, desc, isNull, and, inArray, sql } from 'drizzle-orm';
 import { AIService } from '../services/ai';
-import { getLLMConfig, callLLM } from '../services/llm';
+import { getLLMConfig } from '../services/llm';
 import { ContextService } from '../services/context';
 import { VectorizeService } from '../services/vectorize';
 import {
@@ -523,31 +523,13 @@ router.post('/:sessionId/messages', sessionMessageRateLimit, async (c) => {
 
     // Check if AI detected a plain text query (non-financial)
     if (action.type === 'plain_text') {
-      // Call LLM for natural conversation
-      const systemPrompt = `You are a helpful assistant for a personal finance app.
-The user is asking a non-financial question. Please respond naturally and helpfully.
-After answering, you can gently mention that you're available to help with expense management if needed.`;
-
-      const llmMessages = [
-        { role: 'system' as const, content: systemPrompt },
-        { role: 'user' as const, content },
-      ];
-
-      let aiResponse: string;
-
-      try {
-        // Use the LLM directly for plain text conversation
-        aiResponse = await callLLM(llmMessages, getLLMConfig(c.env), c.env.AI);
-      } catch (error) {
-        console.error('Error calling LLM for plain text:', error);
-        aiResponse = `I appreciate the question! I'm primarily designed to help with expense management.
+      const aiResponse = `I appreciate the question! I'm primarily designed to help with expense management.
 Feel free to ask me about:
 • Adding expenses (e.g., "지출 5000원 커피로 추가")
 • Viewing spending (e.g., "지난달 식비")
 • Generating reports (e.g., "이번달 분석해줘")
 
 How can I help with your finances?`;
-      }
 
       const aiMessage = await db.insert(chatMessages).values({
         userId,

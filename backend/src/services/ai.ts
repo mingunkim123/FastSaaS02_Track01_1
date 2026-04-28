@@ -139,28 +139,15 @@ ${recentTxsFormatted || '(none)'}
 User's categories: ${userCategories.join(', ') || '(none)'}`;
 
     try {
-      // Get dynamic system prompt with user's actual categories
       const systemPrompt = getSystemPrompt(userCategories);
 
-      // First, determine the action type
-      const actionDeterminationResponse = await callLLM(
-        [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: baseContextMessage },
-        ],
-        this.config,
-        this.ai
-      );
-
-      const jsonMatch = actionDeterminationResponse.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('No JSON found in response');
-      const actionResult = JSON.parse(jsonMatch[0]);
-      const actionType = actionResult.type;
-
-      // Get context for the determined action type
       let contextData = null;
       try {
-        contextData = await contextService.getContextForAction(db, userId, actionType, userText);
+        if (typeof contextService.getContextForParse === 'function') {
+          contextData = await contextService.getContextForParse(db, userId, userText);
+        } else {
+          contextData = await contextService.getContextForAction(db, userId, 'read', userText);
+        }
       } catch (error) {
         console.error('Failed to fetch context:', error);
         // Continue without context on error (graceful fallback)
@@ -184,7 +171,7 @@ User's categories: ${userCategories.join(', ') || '(none)'}`;
         content: baseContextMessage,
       });
 
-      // Make LLM call with context-enhanced messages
+      // Make one LLM call with context-enhanced messages.
       const responseText = await callLLM(
         messages,
         this.config,

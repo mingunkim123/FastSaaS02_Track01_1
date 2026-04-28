@@ -342,10 +342,7 @@ describe('routes/sessions.ts', () => {
 
   describe('POST :id/messages — AI action: report', () => {
     it('generates report, saves chat messages, does not create/modify transactions', async () => {
-      // parseUserInput calls callLLM TWICE internally:
-      //   call #1 — action type determination
-      //   call #2 — full parse with context
-      // AIReportService.generateReportSections calls callLLM a third time.
+      // parseUserInput calls callLLM once; report sections are generated from DB aggregation.
       const reportAction = JSON.stringify({
         type: 'report',
         payload: {
@@ -354,21 +351,7 @@ describe('routes/sessions.ts', () => {
         },
         confidence: 0.92,
       });
-      await mockLlmSequence(
-        reportAction,                          // call #1: action determination
-        reportAction,                          // call #2: final parse
-        JSON.stringify({                        // call #3: report sections
-          sections: [
-            {
-              type: 'card',
-              title: '총 지출',
-              metric: '₩0',
-              trend: 'stable',
-              data: {},
-            },
-          ],
-        })
-      );
+      await mockLlmSequence(reportAction);
 
       const userId = freshUserId('reporter');
       await seedUser(dbHandle.db, { id: userId });
@@ -414,20 +397,13 @@ describe('routes/sessions.ts', () => {
 
   describe('POST :id/messages — AI action: plain_text', () => {
     it('saves only chat messages, no transaction or clarification created', async () => {
-      // parseUserInput calls callLLM TWICE internally:
-      //   call #1 — action type determination
-      //   call #2 — full parse with context
-      // The plain_text branch then calls callLLM a third time for the response.
+      // parseUserInput calls callLLM once; plain_text response is static.
       const plainTextAction = JSON.stringify({
         type: 'plain_text',
         payload: {},
         confidence: 0.95,
       });
-      await mockLlmSequence(
-        plainTextAction,                    // call #1: action determination
-        plainTextAction,                    // call #2: final parse
-        '안녕하세요! 무엇을 도와드릴까요?'  // call #3: conversational reply
-      );
+      await mockLlmSequence(plainTextAction);
 
       const userId = freshUserId('chatter');
       await seedUser(dbHandle.db, { id: userId });

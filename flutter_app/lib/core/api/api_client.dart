@@ -173,17 +173,12 @@ class ApiClient {
     int limit = 50,
   }) async {
     try {
-      final params = <String, dynamic>{
-        'limit': limit,
-      };
+      final params = <String, dynamic>{'limit': limit};
       if (month != null) {
         params['month'] = month;
       }
 
-      final response = await _dio.get(
-        '/reports',
-        queryParameters: params,
-      );
+      final response = await _dio.get('/reports', queryParameters: params);
 
       if (response.statusCode == 200) {
         final reports = (response.data['reports'] as List)
@@ -260,8 +255,10 @@ class ApiClient {
   /// GET /api/sessions?limit=50
   Future<Map<String, dynamic>> getSessions({int limit = 50}) async {
     try {
-      final response = await _dio.get('/sessions',
-          queryParameters: {'limit': limit});
+      final response = await _dio.get(
+        '/sessions',
+        queryParameters: {'limit': limit},
+      );
 
       if (response.statusCode == 200) {
         return response.data as Map<String, dynamic>;
@@ -280,10 +277,7 @@ class ApiClient {
   /// Returns the ID of the created session
   Future<int> createSession(String title) async {
     try {
-      final response = await _dio.post(
-        '/sessions',
-        data: {'title': title},
-      );
+      final response = await _dio.post('/sessions', data: {'title': title});
 
       if (response.statusCode == 201) {
         final responseData = response.data as Map<String, dynamic>;
@@ -360,8 +354,8 @@ class ApiClient {
 
   /// Send a chat message in a session
   /// POST /api/sessions/:sessionId/messages
-  /// Returns void - messages are fetched via getSessionMessages
-  Future<void> sendSessionMessage(
+  /// Returns the user + assistant messages from the POST response.
+  Future<List<ChatMessage>> sendSessionMessage(
     int sessionId,
     String message,
   ) async {
@@ -371,12 +365,18 @@ class ApiClient {
         data: {'content': message},
       );
 
-      if (response.statusCode != 200 && response.statusCode != 201) {
-        throw DioException(
-          requestOptions: response.requestOptions,
-          response: response,
-        );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = response.data as Map<String, dynamic>;
+        final messages = (data['messages'] as List)
+            .map((m) => ChatMessage.fromJson(m as Map<String, dynamic>))
+            .toList();
+        messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        return messages;
       }
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+      );
     } on DioException {
       rethrow;
     }
