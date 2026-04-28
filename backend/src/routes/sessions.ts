@@ -53,6 +53,7 @@ import {
   deleteSession,
   generateSessionTitle,
 } from '../services/sessions';
+import type { TransactionAction } from '../types/ai';
 
 const router = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -76,7 +77,7 @@ function generateClarificationQuestion(
 ): string {
   const questions: Record<string, string> = {
     amount: '얼마를 썼나요?',
-    category: '어떤 카테고리인가요? (음식, 교통, 쇼핑, 엔터테인먼트, 유틸리티, 의료, 일, 기타)',
+    category: '어떤 카테고리인가요? (식비, 교통, 쇼핑, 의료, 문화여가, 월세, 월급, 부업, 용돈, 기타)',
     transactionType: '지출인가요, 수입인가요?',
     date: '어느 날짜인가요?',
   };
@@ -433,6 +434,7 @@ router.post('/:sessionId/messages', sessionMessageRateLimit, async (c) => {
 
     // Check for active clarification and merge response if exists
     const activeClarification = await clarificationService.getClarification(db, userId, sessionId);
+    let action: TransactionAction | null = null;
 
     if (activeClarification) {
       // User is replying to a clarification question
@@ -491,17 +493,33 @@ router.post('/:sessionId/messages', sessionMessageRateLimit, async (c) => {
 
       // All fields provided, clear clarification and continue with normal processing
       await clarificationService.deleteClarification(db, userId, sessionId);
+
+      if (mergedData.transactionType && mergedData.amount && mergedData.category) {
+        action = {
+          type: 'create',
+          payload: {
+            transactionType: mergedData.transactionType,
+            amount: mergedData.amount,
+            category: mergedData.category,
+            memo: mergedData.memo,
+            date: mergedData.date || new Date().toISOString().slice(0, 10),
+          },
+          confidence: 0.95,
+        };
+      }
     }
 
     // Parse user input with AI and context enrichment
-    const action = await aiService.parseUserInput(
-      content,
-      transactions_,
-      userCategories,
-      userId,
-      contextService,
-      db
-    );
+    if (!action) {
+      action = await aiService.parseUserInput(
+        content,
+        transactions_,
+        userCategories,
+        userId,
+        contextService,
+        db
+      );
+    }
 
     // Check if AI detected a plain text query (non-financial)
     if (action.type === 'plain_text') {

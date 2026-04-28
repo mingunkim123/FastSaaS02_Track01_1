@@ -36,7 +36,7 @@ import * as messages from '../services/messages';
 import { saveMessage, getChatHistory, clearChatHistory, saveMessageToSession } from '../services/chat';
 import { AIReportService } from '../services/ai-report';
 import { getSession } from '../services/sessions';
-import type { ActionType } from '../types/ai';
+import type { ActionType, TransactionAction } from '../types/ai';
 import { and, eq, isNull, desc, inArray, sql } from 'drizzle-orm';
 import { clarificationService } from '../services/clarifications';
 
@@ -98,7 +98,7 @@ function generateClarificationQuestion(
 ): string {
   const questions: Record<string, string> = {
     amount: '얼마를 썼나요?',
-    category: '어떤 카테고리인가요? (음식, 교통, 쇼핑, 엔터테인먼트, 유틸리티, 의료, 일, 기타)',
+    category: '어떤 카테고리인가요? (식비, 교통, 쇼핑, 의료, 문화여가, 월세, 월급, 부업, 용돈, 기타)',
     transactionType: '지출인가요, 수입인가요?',
     date: '어느 날짜인가요?',
   };
@@ -170,8 +170,8 @@ router.post('/action', aiActionRateLimit, async (c) => {
     const userCategories = categoryRows.map((r: { category: string }) => r.category);
 
     // Check for active clarification and merge response if exists
-    let processedUserText = text;
     const activeClarification = await clarificationService.getClarification(db, userId, sessionId);
+    let action: TransactionAction | null = null;
 
     if (activeClarification) {
       // User is replying to a clarification question
@@ -213,17 +213,33 @@ router.post('/action', aiActionRateLimit, async (c) => {
 
       // All fields provided, clear clarification and continue with normal processing
       await clarificationService.deleteClarification(db, userId, sessionId);
+
+      if (mergedData.transactionType && mergedData.amount && mergedData.category) {
+        action = {
+          type: 'create',
+          payload: {
+            transactionType: mergedData.transactionType,
+            amount: mergedData.amount,
+            category: mergedData.category,
+            memo: mergedData.memo,
+            date: mergedData.date || new Date().toISOString().slice(0, 10),
+          },
+          confidence: 0.95,
+        };
+      }
     }
 
     // Parse user input with AI and context enrichment
-    const action = await aiService.parseUserInput(
-      text,
-      recentTransactions,
-      userCategories,
-      userId,
-      contextService,
-      db
-    );
+    if (!action) {
+      action = await aiService.parseUserInput(
+        text,
+        recentTransactions,
+        userCategories,
+        userId,
+        contextService,
+        db
+      );
+    }
 
     // Check if AI detected a plain text query (non-financial)
     if (action.type === 'plain_text') {

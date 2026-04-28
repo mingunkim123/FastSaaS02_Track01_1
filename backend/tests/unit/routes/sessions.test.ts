@@ -288,6 +288,52 @@ describe('routes/sessions.ts', () => {
       const state = JSON.parse(clarRows[0].state);
       expect(state.missingFields).toContain('amount');
     });
+
+    it('creates a transaction from merged clarification data when the reply completes missing fields', async () => {
+      mockLlmResponse(
+        JSON.stringify({
+          type: 'clarify',
+          payload: {
+            message: '얼마를 썼나요?',
+            missingFields: ['amount'],
+            partialData: {
+              transactionType: 'expense',
+              category: '식비',
+              memo: '커피',
+              date: '2026-04-13',
+            },
+          },
+          confidence: 0.6,
+        })
+      );
+
+      const userId = freshUserId('clarify-create');
+      await seedUser(dbHandle.db, { id: userId });
+      const session = await seedSession(dbHandle.db, { userId });
+      const headers = await authHeaders(userId);
+
+      const clarifyRes = await postMessage(appHandle, session.id, '커피 마셨어요', headers);
+      expect(clarifyRes.status).toBe(200);
+      expect((await clarifyRes.json() as any).type).toBe('clarify');
+
+      const createRes = await postMessage(appHandle, session.id, '5000원이요', headers);
+      expect(createRes.status).toBe(200);
+
+      const body = await createRes.json() as any;
+      expect(body.success).toBe(true);
+      expect(body.type).toBe('create');
+
+      const txRows = await dbHandle.db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.userId, userId))
+        .all();
+
+      expect(txRows).toHaveLength(1);
+      expect(txRows[0].amount).toBe(5000);
+      expect(txRows[0].category).toBe('식비');
+      expect(txRows[0].memo).toBe('커피');
+    });
   });
 
   // -------------------------------------------------------------------------
